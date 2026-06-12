@@ -250,12 +250,15 @@ class _ProfileMenuItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(icon, color: AppColors.black),
-      title: Text(title, style: TextStyle(color: AppColors.textAppBlack)),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+    return Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        leading: Icon(icon, color: AppColors.black),
+        title: Text(title, style: TextStyle(color: AppColors.textAppBlack)),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+      ),
     );
   }
 }

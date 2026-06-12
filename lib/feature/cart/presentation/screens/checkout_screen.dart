@@ -18,6 +18,7 @@ import '../../../order/presentation/providers/order_provider.dart';
 import '../../../cart/domain/entities/cart_item.dart';
 import '../providers/checkout_form_proivder.dart';
 import '../../../../core/services/geo_service.dart';
+import '../../../../core/utils/state_code_helper.dart';
 
 class CheckoutScreen extends ConsumerStatefulWidget {
   final CartItem? buyNowItem;
@@ -1042,13 +1043,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       }
       formattedPhone = formattedPhone.replaceAll(RegExp(r'[^0-9+]'), '');
 
+      final String countryCode = _getCountryCode(formState.country);
       final addressResult = await shippoService.createAddress(
         name: '${formState.firstName} ${formState.lastName}',
         street1: formState.address,
         city: formState.city,
-        state: formState.state,
+        state: getStateCode(formState.state, countryCode),
         zip: formState.zipCode,
-        country: _getCountryCode(formState.country),
+        country: countryCode,
         phone: formattedPhone,
         email: formState.email,
         isResidential: true,
@@ -1238,6 +1240,20 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               'shipping_service': _selectedRate?['servicelevel']?['name'],
             },
           );
+
+      // Push order to Shippo dashboard for fulfillment
+      if (_shippoAddressId != null) {
+        setState(() => _loadingMessage = 'Syncing with Shippo...');
+        await ShippoService().createShippoOrder(
+          orderNumber: order.orderNumber ?? order.id,
+          toAddressId: _shippoAddressId!,
+          items: cartItems,
+          subtotal: order.subtotal,
+          total: order.total,
+          shippingCost: _selectedRate?['amount']?.toString(),
+          shippingMethod: _selectedRate?['servicelevel']?['name'],
+        );
+      }
 
       if (widget.buyNowItem == null) {
         await ref.read(cartProvider.notifier).clearCart();
@@ -1576,6 +1592,20 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               'authorize_transaction_id': transactionId,
             },
           );
+
+      // Push order to Shippo dashboard for fulfillment
+      if (_shippoAddressId != null) {
+        setState(() => _loadingMessage = 'Syncing with Shippo...');
+        await ShippoService().createShippoOrder(
+          orderNumber: order.orderNumber ?? order.id,
+          toAddressId: _shippoAddressId!,
+          items: cartItems,
+          subtotal: order.subtotal,
+          total: order.total,
+          shippingCost: _selectedRate?['amount']?.toString(),
+          shippingMethod: _selectedRate?['servicelevel']?['name'],
+        );
+      }
 
       if (widget.buyNowItem == null) {
         await ref.read(cartProvider.notifier).clearCart();
