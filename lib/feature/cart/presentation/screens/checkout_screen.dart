@@ -10,6 +10,7 @@ import 'package:smilestreatsapp/feature/auth/presentation/providers/auth_provide
 import '../../../../core/constants/app_icons_const.dart';
 import '../../../../core/services/shipo_service.dart';
 import '../../../../core/services/stripe_service.dart';
+import '../../../../core/services/authorize_net_service.dart';
 import '../../../auth/domain/models/user_model.dart';
 import '../../../cart/presentation/providers/cart_provider.dart';
 import '../../../order/domain/entities/order_entities.dart';
@@ -39,6 +40,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final TextEditingController _countryController = TextEditingController();
   String _selectedCountryCode = '+1'; // Default to US country code
   bool _isLoading = false;
+  String _selectedPaymentMethod = 'stripe';
 
   final GeoService _geoService = GeoService();
   List<String> _cities = [];
@@ -750,7 +752,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Pay',
+            'Select Payment Method',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w400,
@@ -758,27 +760,72 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.blue[300]!),
-              borderRadius: BorderRadius.circular(8),
+          // Stripe option
+          GestureDetector(
+            onTap: () => setState(() => _selectedPaymentMethod = 'stripe'),
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: _selectedPaymentMethod == 'stripe'
+                      ? Colors.blue[300]!
+                      : Colors.grey[300]!,
+                  width: _selectedPaymentMethod == 'stripe' ? 2 : 1,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Radio<String>(
+                    value: 'stripe',
+                    groupValue: _selectedPaymentMethod,
+                    onChanged: (value) =>
+                        setState(() => _selectedPaymentMethod = value!),
+                    activeColor: Colors.blue,
+                  ),
+                  const Text(
+                    'Pay With Stripe',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
+                  ),
+                  const Spacer(),
+                  Image.asset(AssetsPath.stripeLogo, height: 40, width: 40),
+                  Gap.w8,
+                ],
+              ),
             ),
-            child: Row(
-              children: [
-                Radio<String>(
-                  value: 'stripe',
-                  groupValue: 'stripe',
-                  onChanged: (value) {},
-                  activeColor: Colors.blue,
+          ),
+          const SizedBox(height: 12),
+          // Authorize.net option
+          GestureDetector(
+            onTap: () =>
+                setState(() => _selectedPaymentMethod = 'authorize_net'),
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: _selectedPaymentMethod == 'authorize_net'
+                      ? Colors.orange[300]!
+                      : Colors.grey[300]!,
+                  width: _selectedPaymentMethod == 'authorize_net' ? 2 : 1,
                 ),
-                const Text(
-                  'Pay With Stripe',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
-                ),
-                const Spacer(),
-                Image.asset(AssetsPath.stripeLogo, height: 40, width: 40),
-                Gap.w8,
-              ],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Radio<String>(
+                    value: 'authorize_net',
+                    groupValue: _selectedPaymentMethod,
+                    onChanged: (value) =>
+                        setState(() => _selectedPaymentMethod = value!),
+                    activeColor: Colors.orange,
+                  ),
+                  const Text(
+                    'Pay With Authorize.net',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
+                  ),
+                  const Spacer(),
+                  const Icon(Icons.credit_card, color: Colors.orange, size: 28),
+                  Gap.w8,
+                ],
+              ),
             ),
           ),
         ],
@@ -968,7 +1015,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   ) async {
     // If rates are already fetched we should proceed to payment
     if (_shippingRates.isNotEmpty && _selectedRate != null) {
-      _proceedToStripePayment(ref, cartItems, total, formState);
+      if (_selectedPaymentMethod == 'authorize_net') {
+        _showCardInputSheet(ref, cartItems, total, formState);
+      } else {
+        _proceedToStripePayment(ref, cartItems, total, formState);
+      }
       return;
     }
 
@@ -1326,6 +1377,240 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         ],
       ),
     );
+  }
+
+  void _showCardInputSheet(
+    WidgetRef ref,
+    List<CartItem> cartItems,
+    double total,
+    CheckoutFormState formState,
+  ) {
+    final cardNumberController = TextEditingController();
+    final expiryController = TextEditingController();
+    final cvvController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            left: 16,
+            right: 16,
+            top: 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Enter Card Details',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: cardNumberController,
+                keyboardType: TextInputType.number,
+                maxLength: 16,
+                decoration: const InputDecoration(
+                  labelText: 'Card Number',
+                  hintText: '1234567890123456',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.credit_card),
+                  counterText: '',
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: expiryController,
+                      keyboardType: TextInputType.number,
+                      maxLength: 5,
+                      decoration: const InputDecoration(
+                        labelText: 'Expiry (MM/YY)',
+                        hintText: 'MM/YY',
+                        border: OutlineInputBorder(),
+                        counterText: '',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: cvvController,
+                      keyboardType: TextInputType.number,
+                      maxLength: 4,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'CVV',
+                        hintText: '123',
+                        border: OutlineInputBorder(),
+                        counterText: '',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: () {
+                    final parts = expiryController.text.trim().split('/');
+                    if (parts.length != 2 ||
+                        parts[0].isEmpty ||
+                        parts[1].isEmpty) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(
+                          content: Text('Invalid expiry. Use MM/YY format'),
+                        ),
+                      );
+                      return;
+                    }
+                    final expirationDate =
+                        '20${parts[1]}-${parts[0].padLeft(2, '0')}'; // YYYY-MM
+                    Navigator.pop(ctx);
+                    _proceedToAuthorizeNetPayment(
+                      ref,
+                      cartItems,
+                      total,
+                      formState,
+                      cardNumberController.text.trim(),
+                      expirationDate,
+                      cvvController.text.trim(),
+                    );
+                  },
+                  child: const Text(
+                    'Pay Now',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _proceedToAuthorizeNetPayment(
+    WidgetRef ref,
+    List<CartItem> cartItems,
+    double total,
+    CheckoutFormState formState,
+    String cardNumber,
+    String expirationDate,
+    String cardCode,
+  ) async {
+    setState(() {
+      _isLoading = true;
+      _loadingMessage = 'Processing Payment...';
+    });
+
+    try {
+      final paymentResult = await AuthorizeNetService.processPayment(
+        amount: total,
+        cardNumber: cardNumber,
+        expirationDate: expirationDate,
+        cardCode: cardCode,
+        customerEmail: formState.email,
+        metadata: {
+          'order_items': cartItems.length.toString(),
+          'shippo_address_id': _shippoAddressId ?? '',
+          'shippo_rate_id': _selectedRate?['object_id'] ?? '',
+        },
+      );
+
+      if (!paymentResult['success']) {
+        throw Exception(paymentResult['error'] ?? 'Payment failed');
+      }
+
+      final String transactionId = paymentResult['transactionId'];
+      DPrint.log(
+          'Authorize.net payment successful. TransactionId: $transactionId');
+
+      setState(() => _loadingMessage = 'Finalizing Order...');
+
+      String phoneInput = formState.phoneNumber.trim();
+      String formattedPhone = phoneInput.startsWith('+')
+          ? phoneInput
+          : '$_selectedCountryCode$phoneInput';
+      formattedPhone = formattedPhone.replaceAll(RegExp(r'[^0-9+]'), '');
+
+      final shippingAddress = ShippingAddress(
+        firstName: formState.firstName,
+        lastName: formState.lastName,
+        email: formState.email,
+        phoneNumber: formattedPhone,
+        address: formState.address,
+        city: formState.city,
+        state: formState.state,
+        zipCode: formState.zipCode,
+        country: formState.country,
+      );
+
+      final order = await ref.read(orderProvider.notifier).createOrder(
+            items: cartItems,
+            shippingAddress: shippingAddress,
+            paymentIntentId: 'authnet_$transactionId',
+            metadata: {
+              'shippo_address_id': _shippoAddressId,
+              'shippo_rate_id': _selectedRate?['object_id'],
+              'shipping_cost': _selectedRate?['amount'],
+              'shipping_service': _selectedRate?['servicelevel']?['name'],
+              'payment_gateway': 'authorize_net',
+              'authorize_transaction_id': transactionId,
+            },
+          );
+
+      if (widget.buyNowItem == null) {
+        await ref.read(cartProvider.notifier).clearCart();
+      }
+
+      ref.read(checkoutFormProvider.notifier).reset();
+
+      if (ref.context.mounted) {
+        GoRouter.of(ref.context).go(RoutePaths.orderConfirm, extra: order);
+      }
+    } catch (e) {
+      DPrint.error('Authorize.net Payment Error: $e');
+      if (ref.context.mounted) {
+        showDialog(
+          context: ref.context,
+          builder: (context) => AlertDialog(
+            title: const Text('Payment Error'),
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _loadingMessage = 'Continue to Payment';
+        });
+      }
+    }
   }
 
   String _getCountryCode(String countryName) {
