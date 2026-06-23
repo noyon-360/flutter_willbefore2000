@@ -11,7 +11,7 @@ class AuthorizeNetService {
       'https://api.authorize.net/xml/v1/request.api';
 
   // Set to false when going live
-  static const bool _isSandbox = true;
+  static const bool _isSandbox = false;
 
   static String get _baseUrl => _isSandbox ? _sandboxUrl : _liveUrl;
 
