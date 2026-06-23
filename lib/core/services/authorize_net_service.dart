@@ -7,11 +7,10 @@ import '../constants/authorize_net_keys.dart';
 class AuthorizeNetService {
   static const String _sandboxUrl =
       'https://apitest.authorize.net/xml/v1/request.api';
-  static const String _liveUrl =
-      'https://api.authorize.net/xml/v1/request.api';
+  static const String _liveUrl = 'https://api.authorize.net/xml/v1/request.api';
 
   // Set to false when going live
-  static const bool _isSandbox = false;
+  static const bool _isSandbox = true;
 
   static String get _baseUrl => _isSandbox ? _sandboxUrl : _liveUrl;
 
@@ -38,20 +37,17 @@ class AuthorizeNetService {
                 "cardNumber": cardNumber,
                 "expirationDate": expirationDate,
                 "cardCode": cardCode,
-              }
-            },
-            if (customerEmail != null)
-              "customer": {
-                "email": customerEmail,
               },
+            },
+            if (customerEmail != null) "customer": {"email": customerEmail},
             if (metadata != null && metadata.isNotEmpty)
               "userFields": {
                 "userField": metadata.entries
                     .map((e) => {"name": e.key, "value": e.value})
                     .toList(),
               },
-          }
-        }
+          },
+        },
       };
 
       final response = await http.post(
@@ -72,14 +68,16 @@ class AuthorizeNetService {
             transactionResponse != null &&
             transactionResponse['responseCode'] == '1') {
           DPrint.log(
-              "Authorize.net payment successful. TransactionId: ${transactionResponse['transId']}");
+            "Authorize.net payment successful. TransactionId: ${transactionResponse['transId']}",
+          );
           return {
             'success': true,
             'transactionId': transactionResponse['transId'],
             'authCode': transactionResponse['authCode'],
           };
         } else {
-          final errorText = transactionResponse?['errors']?[0]?['errorText'] ??
+          final errorText =
+              transactionResponse?['errors']?[0]?['errorText'] ??
               messages['message']?[0]?['text'] ??
               'Payment failed';
           DPrint.error('Authorize.net payment declined: $errorText');
@@ -114,11 +112,11 @@ class AuthorizeNetService {
               "creditCard": {
                 "cardNumber": cardLastFour,
                 "expirationDate": expirationDate,
-              }
+              },
             },
             "refTransId": transactionId,
-          }
-        }
+          },
+        },
       };
 
       final response = await http.post(
@@ -133,7 +131,9 @@ class AuthorizeNetService {
         final messages = data['messages'];
 
         if (messages['resultCode'] == 'Ok') {
-          DPrint.log("Authorize.net refund successful for transaction: $transactionId");
+          DPrint.log(
+            "Authorize.net refund successful for transaction: $transactionId",
+          );
           return {'success': true, 'transactionId': transactionId};
         } else {
           final errorText = messages['message']?[0]?['text'] ?? 'Refund failed';
@@ -150,7 +150,8 @@ class AuthorizeNetService {
   }
 
   static Future<Map<String, dynamic>> getTransactionDetails(
-      String transactionId) async {
+    String transactionId,
+  ) async {
     try {
       final body = {
         "getTransactionDetailsRequest": {
@@ -159,7 +160,7 @@ class AuthorizeNetService {
             "transactionKey": authorizeNetTransactionKey,
           },
           "transId": transactionId,
-        }
+        },
       };
 
       final response = await http.post(

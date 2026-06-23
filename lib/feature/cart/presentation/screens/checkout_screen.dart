@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutx_core/flutx_core.dart';
 import 'package:go_router/go_router.dart';
-import 'package:country_picker/country_picker.dart';
 import 'package:smilestreatsapp/core/constants/app_colors.dart';
 import 'package:smilestreatsapp/core/routes/route_endpoint.dart';
 import 'package:smilestreatsapp/core/utils/extensions/button_extensions.dart';
@@ -39,15 +38,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final TextEditingController _stateController = TextEditingController();
   final TextEditingController _zipCodeController = TextEditingController();
   final TextEditingController _countryController = TextEditingController();
-  String _selectedCountryCode = '+1'; // Default to US country code
   bool _isLoading = false;
   String _selectedPaymentMethod = 'stripe';
 
   final GeoService _geoService = GeoService();
+  final List<String> _states = GeoService.usStates;
   List<String> _cities = [];
-  List<String> _states = [];
-  bool _isLoadingStates = false;
-  bool _isLoadingCities = false;
+  List<String> _zipCodes = [];
+  bool _isLoadingZips = false;
 
   // Shipping Rates
   List<dynamic> _shippingRates = [];
@@ -120,174 +118,32 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       formNotifier.updateField('zipCode', _zipCodeController.text);
       formNotifier.updateField('country', _countryController.text);
 
-      // Fetch cities and states if country is already pre-filled
-      if (_countryController.text.isNotEmpty) {
-        _fetchAllCities(_countryController.text);
-        _fetchAllStates(_countryController.text);
-      }
     }
   }
 
-  Future<void> _fetchAllStates(String countryName) async {
+  void _loadCitiesForState(String stateName) {
     setState(() {
-      _isLoadingStates = true;
-      _states = [];
+      _cities = _geoService.getCitiesForState(stateName);
+      _zipCodes = [];
+      _cityController.clear();
+      _zipCodeController.clear();
     });
-    final states = await _geoService.getStates(countryName);
-    if (mounted) {
-      setState(() {
-        _states = states;
-        _isLoadingStates = false;
-      });
-    }
+    _updateFormField('city', '');
+    _updateFormField('zipCode', '');
   }
 
-  Future<void> _fetchAllCities(String countryName) async {
+  Future<void> _fetchZipsForCity(String city, String stateCode) async {
     setState(() {
-      _isLoadingCities = true;
-      _cities = [];
+      _isLoadingZips = true;
+      _zipCodes = [];
+      _zipCodeController.clear();
     });
-    final cities = await _geoService.getAllCities(countryName);
-    if (mounted) {
-      setState(() {
-        _cities = cities;
-        _isLoadingCities = false;
-      });
-    }
-  }
-
-  Future<void> _findStateForCity(String countryName, String cityName) async {
-    setState(() {
-      _isLoadingStates = true;
-    });
-
-    // Fetch all states for the country
-    final states = await _geoService.getStates(countryName);
-
-    // Check each state to find which one contains this city
-    for (final state in states) {
-      final citiesInState = await _geoService.getCities(countryName, state);
-      if (citiesInState.any((c) => c.toLowerCase() == cityName.toLowerCase())) {
-        if (mounted) {
-          setState(() {
-            _stateController.text = state;
-            _isLoadingStates = false;
-          });
-          _updateFormField('state', state);
-        }
-        return;
-      }
-    }
-
-    // If no state found, clear the loading state
-    if (mounted) {
-      setState(() {
-        _isLoadingStates = false;
-      });
-    }
-  }
-
-  void _showCountryPicker(BuildContext context) {
-    showCountryPicker(
-      context: context,
-      showPhoneCode: true, // Show phone codes
-      countryListTheme: CountryListThemeData(
-        flagSize: 25,
-        backgroundColor: Colors.white,
-        textStyle: const TextStyle(fontSize: 16, color: Colors.blueGrey),
-        bottomSheetHeight: MediaQuery.of(context).size.height * 0.7,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(20.0),
-          topRight: Radius.circular(20.0),
-        ),
-        inputDecoration: InputDecoration(
-          labelText: 'Search',
-          hintText: 'Start typing to search',
-          prefixIcon: const Icon(Icons.search),
-          border: OutlineInputBorder(
-            borderSide: BorderSide(
-              color: const Color(0xFF8C98A8).withValues(alpha: 0.2),
-            ),
-          ),
-        ),
-      ),
-      onSelect: (Country country) {
-        setState(() {
-          _countryController.text = country.name;
-          _selectedCountryCode = '+${country.phoneCode}';
-          // Reset dependent fields
-          _stateController.clear();
-          _cityController.clear();
-          _cities = [];
-          _states = [];
-        });
-        _updateFormField('country', country.name);
-        _updateFormField('state', '');
-        _updateFormField('city', '');
-        _fetchAllCities(country.name);
-        _fetchAllStates(country.name);
-      },
-    );
-  }
-
-  void _showCityPicker() {
-    if (_countryController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a country first')),
-      );
-      return;
-    }
-
-    if (_isLoadingCities) return;
-
-    if (_cities.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No cities found for this country')),
-      );
-      return;
-    }
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return _buildSearchableList(
-          title: 'Select City',
-          items: _cities,
-          onSelect: (city) {
-            setState(() {
-              _cityController.text = city;
-            });
-            _updateFormField('city', city);
-            // Auto-detect state based on selected city
-            _findStateForCity(_countryController.text, city);
-            Navigator.pop(context);
-          },
-        );
-      },
-    );
+    _updateFormField('zipCode', '');
+    final zips = await _geoService.getZipsForCity(city, stateCode);
+    if (mounted) setState(() { _zipCodes = zips; _isLoadingZips = false; });
   }
 
   void _showStatePicker() {
-    if (_countryController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a country first')),
-      );
-      return;
-    }
-
-    if (_isLoadingStates) return;
-
-    if (_states.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No states found for this country')),
-      );
-      return;
-    }
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -299,10 +155,78 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           title: 'Select State',
           items: _states,
           onSelect: (state) {
-            setState(() {
-              _stateController.text = state;
-            });
+            setState(() { _stateController.text = state; });
             _updateFormField('state', state);
+            Navigator.pop(context);
+            _loadCitiesForState(state);
+          },
+        );
+      },
+    );
+  }
+
+  void _showCityPicker() {
+    if (_stateController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a state first')),
+      );
+      return;
+    }
+    if (_cities.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No cities found for this state')),
+      );
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return _buildSearchableList(
+          title: 'Select City',
+          items: _cities,
+          onSelect: (city) {
+            setState(() { _cityController.text = city; });
+            _updateFormField('city', city);
+            Navigator.pop(context);
+            final stateCode = getStateCode(_stateController.text, 'US');
+            _fetchZipsForCity(city, stateCode);
+          },
+        );
+      },
+    );
+  }
+
+  void _showZipPicker() {
+    if (_cityController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a city first')),
+      );
+      return;
+    }
+    if (_isLoadingZips) return;
+    if (_zipCodes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No ZIP codes found for this city')),
+      );
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return _buildSearchableList(
+          title: 'Select ZIP Code',
+          items: _zipCodes,
+          onSelect: (zip) {
+            setState(() { _zipCodeController.text = zip; });
+            _updateFormField('zipCode', zip);
             Navigator.pop(context);
           },
         );
@@ -563,139 +487,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             isRequired: true,
           ),
           const SizedBox(height: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
-                children: [
-                  Text(
-                    'Phone Number',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                      color: AppColors.iconDeselectedColor,
-                    ),
-                  ),
-                  Text(
-                    ' *',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                      color: Colors.red,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      showCountryPicker(
-                        context: context,
-                        showPhoneCode: true,
-                        onSelect: (Country country) {
-                          setState(() {
-                            _selectedCountryCode = '+${country.phoneCode}';
-                          });
-                        },
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: AppColors.iconDeselectedColor,
-                        ),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        _selectedCountryCode,
-                        style: const TextStyle(fontSize: 14),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _phoneNumberController,
-                      keyboardType: TextInputType.phone,
-                      onChanged: (value) {
-                        _updateFormField('phoneNumber', value);
-                      },
-                      decoration: InputDecoration(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
-                        isDense: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: BorderSide(
-                            color: AppColors.iconDeselectedColor,
-                          ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: BorderSide(
-                            color: AppColors.iconDeselectedColor,
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: const BorderSide(
-                            color: AppColors.iconDeselectedColor,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Country moved before Address
-          const Text(
-            'Country',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey,
-            ),
-          ),
-          const SizedBox(height: 8),
-          GestureDetector(
-            onTap: () => _showCountryPicker(context),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey[300]!),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _countryController.text.isEmpty
-                          ? 'Select Country'
-                          : _countryController.text,
-                      style: TextStyle(
-                        color: _countryController.text.isEmpty
-                            ? Colors.grey
-                            : Colors.black,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                  Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
-                ],
-              ),
-            ),
+          _buildTextField(
+            controller: _phoneNumberController,
+            field: 'phoneNumber',
+            label: 'Phone Number',
+            keyboardType: TextInputType.phone,
+            isRequired: true,
           ),
           const SizedBox(height: 16),
           _buildTextField(
@@ -705,34 +502,35 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             isRequired: true,
           ),
           const SizedBox(height: 16),
+          _buildCascadingPicker(
+            label: 'State',
+            controller: _stateController,
+            onTap: _showStatePicker,
+            isLoading: false,
+            enabled: true,
+          ),
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
+                flex: 3,
                 child: _buildCascadingPicker(
                   label: 'City',
                   controller: _cityController,
                   onTap: _showCityPicker,
-                  isLoading: _isLoadingCities,
-                  enabled: _countryController.text.isNotEmpty,
+                  isLoading: false,
+                  enabled: _stateController.text.isNotEmpty,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
+                flex: 2,
                 child: _buildCascadingPicker(
-                  label: 'State',
-                  controller: _stateController,
-                  onTap: _showStatePicker,
-                  isLoading: _isLoadingStates,
-                  enabled: _countryController.text.isNotEmpty,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildTextField(
-                  controller: _zipCodeController,
-                  field: 'zipCode',
                   label: 'ZIP Code',
-                  isRequired: true,
+                  controller: _zipCodeController,
+                  onTap: _showZipPicker,
+                  isLoading: _isLoadingZips,
+                  enabled: _cityController.text.isNotEmpty,
                 ),
               ),
             ],
@@ -1039,7 +837,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       if (phoneInput.startsWith('+')) {
         formattedPhone = phoneInput;
       } else {
-        formattedPhone = '$_selectedCountryCode$phoneInput';
+        formattedPhone = '+1$phoneInput';
       }
       formattedPhone = formattedPhone.replaceAll(RegExp(r'[^0-9+]'), '');
 
@@ -1212,7 +1010,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       String phoneInput = formState.phoneNumber.trim();
       String formattedPhone = phoneInput.startsWith('+')
           ? phoneInput
-          : '$_selectedCountryCode$phoneInput';
+          : '+1$phoneInput';
       formattedPhone = formattedPhone.replaceAll(RegExp(r'[^0-9+]'), '');
 
       final shippingAddress = ShippingAddress(
@@ -1564,7 +1362,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       String phoneInput = formState.phoneNumber.trim();
       String formattedPhone = phoneInput.startsWith('+')
           ? phoneInput
-          : '$_selectedCountryCode$phoneInput';
+          : '+1$phoneInput';
       formattedPhone = formattedPhone.replaceAll(RegExp(r'[^0-9+]'), '');
 
       final shippingAddress = ShippingAddress(
@@ -1644,12 +1442,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   String _getCountryCode(String countryName) {
-    try {
-      final country = Country.tryParse(countryName);
-      return country?.countryCode ?? 'US';
-    } catch (e) {
-      return 'US'; // Default fallback
-    }
+    return 'US';
   }
 
   // String _formatPhoneNumber(String phone, String countryName) {
