@@ -6,9 +6,9 @@ import 'package:smilestreatsapp/core/constants/app_colors.dart';
 import 'package:smilestreatsapp/core/routes/route_endpoint.dart';
 import 'package:smilestreatsapp/core/utils/extensions/button_extensions.dart';
 import 'package:smilestreatsapp/feature/auth/presentation/providers/auth_provider.dart';
-import '../../../../core/constants/app_icons_const.dart';
+// import '../../../../core/constants/app_icons_const.dart';
 import '../../../../core/services/shipo_service.dart';
-import '../../../../core/services/stripe_service.dart';
+// import '../../../../core/services/stripe_service.dart';
 import '../../../../core/services/authorize_net_service.dart';
 import '../../../auth/domain/models/user_model.dart';
 import '../../../cart/presentation/providers/cart_provider.dart';
@@ -39,7 +39,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final TextEditingController _zipCodeController = TextEditingController();
   final TextEditingController _countryController = TextEditingController();
   bool _isLoading = false;
-  String _selectedPaymentMethod = 'stripe';
+  // String _selectedPaymentMethod = 'stripe';
+  String _selectedPaymentMethod = 'authorize_net';
 
   final GeoService _geoService = GeoService();
   final List<String> _states = GeoService.usStates;
@@ -560,39 +561,39 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           ),
           const SizedBox(height: 16),
           // Stripe option
-          GestureDetector(
-            onTap: () => setState(() => _selectedPaymentMethod = 'stripe'),
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: _selectedPaymentMethod == 'stripe'
-                      ? Colors.blue[300]!
-                      : Colors.grey[300]!,
-                  width: _selectedPaymentMethod == 'stripe' ? 2 : 1,
-                ),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Radio<String>(
-                    value: 'stripe',
-                    groupValue: _selectedPaymentMethod,
-                    onChanged: (value) =>
-                        setState(() => _selectedPaymentMethod = value!),
-                    activeColor: Colors.blue,
-                  ),
-                  const Text(
-                    'Pay With Stripe',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
-                  ),
-                  const Spacer(),
-                  Image.asset(AssetsPath.stripeLogo, height: 40, width: 40),
-                  Gap.w8,
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
+          // GestureDetector(
+          //   onTap: () => setState(() => _selectedPaymentMethod = 'stripe'),
+          //   child: Container(
+          //     decoration: BoxDecoration(
+          //       border: Border.all(
+          //         color: _selectedPaymentMethod == 'stripe'
+          //             ? Colors.blue[300]!
+          //             : Colors.grey[300]!,
+          //         width: _selectedPaymentMethod == 'stripe' ? 2 : 1,
+          //       ),
+          //       borderRadius: BorderRadius.circular(8),
+          //     ),
+          //     child: Row(
+          //       children: [
+          //         Radio<String>(
+          //           value: 'stripe',
+          //           groupValue: _selectedPaymentMethod,
+          //           onChanged: (value) =>
+          //               setState(() => _selectedPaymentMethod = value!),
+          //           activeColor: Colors.blue,
+          //         ),
+          //         const Text(
+          //           'Pay With Stripe',
+          //           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
+          //         ),
+          //         const Spacer(),
+          //         Image.asset(AssetsPath.stripeLogo, height: 40, width: 40),
+          //         Gap.w8,
+          //       ],
+          //     ),
+          //   ),
+          // ),
+          // const SizedBox(height: 12),
           // Authorize.net option
           GestureDetector(
             onTap: () =>
@@ -816,9 +817,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     if (_shippingRates.isNotEmpty && _selectedRate != null) {
       if (_selectedPaymentMethod == 'authorize_net') {
         _showCardInputSheet(ref, cartItems, total, formState);
-      } else {
-        _proceedToStripePayment(ref, cartItems, total, formState);
       }
+      // else {
+      //   _proceedToStripePayment(ref, cartItems, total, formState);
+      // }
       return;
     }
 
@@ -967,127 +969,127 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     }
   }
 
-  Future<void> _proceedToStripePayment(
-    WidgetRef ref,
-    List<CartItem> cartItems,
-    double total,
-    CheckoutFormState formState,
-  ) async {
-    setState(() {
-      _isLoading = true;
-      _loadingMessage = 'Processing Payment...';
-    });
+  // Future<void> _proceedToStripePayment(
+  //   WidgetRef ref,
+  //   List<CartItem> cartItems,
+  //   double total,
+  //   CheckoutFormState formState,
+  // ) async {
+  //   setState(() {
+  //     _isLoading = true;
+  //     _loadingMessage = 'Processing Payment...';
+  //   });
 
-    try {
-      DPrint.log('Proceeding to Stripe Payment with total: $total');
+  //   try {
+  //     DPrint.log('Proceeding to Stripe Payment with total: $total');
 
-      final paymentResult = await StripeService.processPayment(
-        amount: total,
-        currency: 'usd',
-        metadata: {
-          'customer_email': formState.email,
-          'order_items': cartItems.length.toString(),
-          'shippo_address_id': _shippoAddressId,
-          'shippo_rate_id': _selectedRate?['object_id'],
-        },
-      );
+  //     final paymentResult = await StripeService.processPayment(
+  //       amount: total,
+  //       currency: 'usd',
+  //       metadata: {
+  //         'customer_email': formState.email,
+  //         'order_items': cartItems.length.toString(),
+  //         'shippo_address_id': _shippoAddressId,
+  //         'shippo_rate_id': _selectedRate?['object_id'],
+  //       },
+  //     );
 
-      if (!paymentResult['success']) {
-        throw Exception(paymentResult['error'] ?? 'Payment failed');
-      }
+  //     if (!paymentResult['success']) {
+  //       throw Exception(paymentResult['error'] ?? 'Payment failed');
+  //     }
 
-      final String realPaymentIntentId = paymentResult['paymentIntentId'];
+  //     final String realPaymentIntentId = paymentResult['paymentIntentId'];
 
-      DPrint.log(
-        "Payment processed successfully. PaymentIntent ID: $realPaymentIntentId",
-      );
+  //     DPrint.log(
+  //       "Payment processed successfully. PaymentIntent ID: $realPaymentIntentId",
+  //     );
 
-      DPrint.log('Creating Order in Database...');
-      setState(() {
-        _loadingMessage = 'Finalizing Order...';
-      });
+  //     DPrint.log('Creating Order in Database...');
+  //     setState(() {
+  //       _loadingMessage = 'Finalizing Order...';
+  //     });
 
-      String phoneInput = formState.phoneNumber.trim();
-      String formattedPhone = phoneInput.startsWith('+')
-          ? phoneInput
-          : '+1$phoneInput';
-      formattedPhone = formattedPhone.replaceAll(RegExp(r'[^0-9+]'), '');
+  //     String phoneInput = formState.phoneNumber.trim();
+  //     String formattedPhone = phoneInput.startsWith('+')
+  //         ? phoneInput
+  //         : '+1$phoneInput';
+  //     formattedPhone = formattedPhone.replaceAll(RegExp(r'[^0-9+]'), '');
 
-      final shippingAddress = ShippingAddress(
-        firstName: formState.firstName,
-        lastName: formState.lastName,
-        email: formState.email,
-        phoneNumber: formattedPhone,
-        address: formState.address,
-        city: formState.city,
-        state: formState.state,
-        zipCode: formState.zipCode,
-        country: formState.country,
-      );
+  //     final shippingAddress = ShippingAddress(
+  //       firstName: formState.firstName,
+  //       lastName: formState.lastName,
+  //       email: formState.email,
+  //       phoneNumber: formattedPhone,
+  //       address: formState.address,
+  //       city: formState.city,
+  //       state: formState.state,
+  //       zipCode: formState.zipCode,
+  //       country: formState.country,
+  //     );
 
-      final order = await ref
-          .read(orderProvider.notifier)
-          .createOrder(
-            items: cartItems,
-            shippingAddress: shippingAddress,
-            paymentIntentId: realPaymentIntentId,
-            metadata: {
-              'shippo_address_id': _shippoAddressId,
-              'shippo_rate_id': _selectedRate?['object_id'],
-              'shipping_cost': _selectedRate?['amount'],
-              'shipping_service': _selectedRate?['servicelevel']?['name'],
-            },
-          );
+  //     final order = await ref
+  //         .read(orderProvider.notifier)
+  //         .createOrder(
+  //           items: cartItems,
+  //           shippingAddress: shippingAddress,
+  //           paymentIntentId: realPaymentIntentId,
+  //           metadata: {
+  //             'shippo_address_id': _shippoAddressId,
+  //             'shippo_rate_id': _selectedRate?['object_id'],
+  //             'shipping_cost': _selectedRate?['amount'],
+  //             'shipping_service': _selectedRate?['servicelevel']?['name'],
+  //           },
+  //         );
 
-      // Push order to Shippo dashboard for fulfillment
-      if (_shippoAddressId != null) {
-        setState(() => _loadingMessage = 'Syncing with Shippo...');
-        await ShippoService().createShippoOrder(
-          orderNumber: order.orderNumber ?? order.id,
-          toAddressId: _shippoAddressId!,
-          items: cartItems,
-          subtotal: order.subtotal,
-          total: order.total,
-          shippingCost: _selectedRate?['amount']?.toString(),
-          shippingMethod: _selectedRate?['servicelevel']?['name'],
-        );
-      }
+  //     // Push order to Shippo dashboard for fulfillment
+  //     if (_shippoAddressId != null) {
+  //       setState(() => _loadingMessage = 'Syncing with Shippo...');
+  //       await ShippoService().createShippoOrder(
+  //         orderNumber: order.orderNumber ?? order.id,
+  //         toAddressId: _shippoAddressId!,
+  //         items: cartItems,
+  //         subtotal: order.subtotal,
+  //         total: order.total,
+  //         shippingCost: _selectedRate?['amount']?.toString(),
+  //         shippingMethod: _selectedRate?['servicelevel']?['name'],
+  //       );
+  //     }
 
-      if (widget.buyNowItem == null) {
-        await ref.read(cartProvider.notifier).clearCart();
-      }
+  //     if (widget.buyNowItem == null) {
+  //       await ref.read(cartProvider.notifier).clearCart();
+  //     }
 
-      ref.read(checkoutFormProvider.notifier).reset();
+  //     ref.read(checkoutFormProvider.notifier).reset();
 
-      if (ref.context.mounted) {
-        GoRouter.of(ref.context).go(RoutePaths.orderConfirm, extra: order);
-      }
-    } catch (e) {
-      DPrint.error('Payment Error: $e');
-      if (ref.context.mounted) {
-        showDialog(
-          context: ref.context,
-          builder: (context) => AlertDialog(
-            title: const Text('Payment Error'),
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _loadingMessage = 'Continue to Payment';
-        });
-      }
-    }
-  }
+  //     if (ref.context.mounted) {
+  //       GoRouter.of(ref.context).go(RoutePaths.orderConfirm, extra: order);
+  //     }
+  //   } catch (e) {
+  //     DPrint.error('Payment Error: $e');
+  //     if (ref.context.mounted) {
+  //       showDialog(
+  //         context: ref.context,
+  //         builder: (context) => AlertDialog(
+  //           title: const Text('Payment Error'),
+  //           content: Text(e.toString().replaceAll('Exception: ', '')),
+  //           actions: [
+  //             TextButton(
+  //               onPressed: () => Navigator.pop(context),
+  //               child: const Text('OK'),
+  //             ),
+  //           ],
+  //         ),
+  //       );
+  //     }
+  //   } finally {
+  //     if (mounted) {
+  //       setState(() {
+  //         _isLoading = false;
+  //         _loadingMessage = 'Continue to Payment';
+  //       });
+  //     }
+  //   }
+  // }
 
   Widget _buildShippingRatesSection() {
     return Container(

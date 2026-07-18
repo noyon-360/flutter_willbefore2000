@@ -15,12 +15,12 @@ void main() async {
 
   NotificationService().initialize();
 
-  try {
-    // Initialize Stripe
-    await StripeService.init();
-  } catch (e) {
-    debugPrint("StripeService initialization failed: $e");
-  }
+  // try {
+  //   // Initialize Stripe
+  //   await StripeService.init();
+  // } catch (e) {
+  //   debugPrint("StripeService initialization failed: $e");
+  // }
 
   runApp(const ProviderScope(child: MyApp()));
 }
