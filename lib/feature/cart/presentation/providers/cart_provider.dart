@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/legacy.dart';
@@ -13,22 +14,41 @@ class CartState {
   final List<CartItem> items;
   final bool isLoading;
   final String? errorMessage;
+  final String? appliedPromoCode;
+  final double promoDiscount;
+  final bool isValidatingPromo;
+  final String? promoError;
 
   const CartState({
     this.items = const [],
     this.isLoading = false,
     this.errorMessage,
+    this.appliedPromoCode,
+    this.promoDiscount = 0.0,
+    this.isValidatingPromo = false,
+    this.promoError,
   });
 
   CartState copyWith({
     List<CartItem>? items,
     bool? isLoading,
     String? errorMessage,
+    String? appliedPromoCode,
+    double? promoDiscount,
+    bool? isValidatingPromo,
+    String? promoError,
+    bool clearPromo = false,
+    bool clearPromoError = false,
+    bool clearError = false,
   }) {
     return CartState(
       items: items ?? this.items,
       isLoading: isLoading ?? this.isLoading,
-      errorMessage: errorMessage ?? this.errorMessage,
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      appliedPromoCode: clearPromo ? null : (appliedPromoCode ?? this.appliedPromoCode),
+      promoDiscount: clearPromo ? 0.0 : (promoDiscount ?? this.promoDiscount),
+      isValidatingPromo: isValidatingPromo ?? this.isValidatingPromo,
+      promoError: clearPromoError || clearPromo ? null : (promoError ?? this.promoError),
     );
   }
 
@@ -37,11 +57,12 @@ class CartState {
   }
 
   double get tax {
-    return 0.0; // No tax for now
+    return 0.0;
   }
 
   double get total {
-    return subtotal + tax;
+    final discounted = subtotal - promoDiscount;
+    return (discounted < 0 ? 0.0 : discounted) + tax;
   }
 
   int get totalItems {
@@ -284,6 +305,89 @@ class CartNotifier extends StateNotifier<CartState> {
     } catch (e) {
       state = state.copyWith(isLoading: false, errorMessage: e.toString());
     }
+  }
+
+  Future<void> applyPromoCode(String code) async {
+    if (code.trim().isEmpty) return;
+    state = state.copyWith(isValidatingPromo: true, clearPromoError: true);
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('promos')
+          .where('code', isEqualTo: code.trim().toUpperCase())
+          .limit(1)
+          .get();
+
+      if (snapshot.docs.isEmpty) {
+        state = state.copyWith(
+          isValidatingPromo: false,
+          promoError: 'Invalid promo code.',
+        );
+        return;
+      }
+
+      final data = snapshot.docs.first.data();
+      final bool isActive = data['isActive'] ?? false;
+      final int endDate = data['endDate'] ?? 0;
+      final int startDate = data['startDate'] ?? 0;
+      final int usageLimit = data['usageLimit'] ?? 0;
+      final int usedCount = data['usedCount'] ?? 0;
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      if (!isActive || now < startDate || now > endDate) {
+        state = state.copyWith(
+          isValidatingPromo: false,
+          promoError: 'This promo code has expired or is inactive.',
+        );
+        return;
+      }
+
+      if (usageLimit > 0 && usedCount >= usageLimit) {
+        state = state.copyWith(
+          isValidatingPromo: false,
+          promoError: 'This promo code has reached its usage limit.',
+        );
+        return;
+      }
+
+      final double? minimumOrderAmount =
+          (data['minimumOrderAmount'] as num?)?.toDouble();
+      if (minimumOrderAmount != null && state.subtotal < minimumOrderAmount) {
+        state = state.copyWith(
+          isValidatingPromo: false,
+          promoError:
+              'Minimum order of \$${minimumOrderAmount.toStringAsFixed(2)} required.',
+        );
+        return;
+      }
+
+      double discount = 0.0;
+      final double pct = (data['discountPercentage'] as num?)?.toDouble() ?? 0.0;
+      final double? fixedAmount = (data['discountAmount'] as num?)?.toDouble();
+
+      if (fixedAmount != null && fixedAmount > 0) {
+        discount = fixedAmount;
+      } else if (pct > 0) {
+        discount = state.subtotal * pct / 100;
+      }
+
+      if (discount > state.subtotal) discount = state.subtotal;
+
+      state = state.copyWith(
+        isValidatingPromo: false,
+        appliedPromoCode: code.trim().toUpperCase(),
+        promoDiscount: discount,
+        clearPromoError: true,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isValidatingPromo: false,
+        promoError: 'Failed to validate promo code.',
+      );
+    }
+  }
+
+  void removePromoCode() {
+    state = state.copyWith(clearPromo: true);
   }
 }
 

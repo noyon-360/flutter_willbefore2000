@@ -11,25 +11,46 @@ import '../../../../core/constants/app_colors.dart';
 import '../providers/cart_provider.dart';
 import '../widgets/cart_item_widget.dart';
 
-class CartScreen extends ConsumerWidget {
+class CartScreen extends ConsumerStatefulWidget {
   const CartScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CartScreen> createState() => _CartScreenState();
+}
+
+class _CartScreenState extends ConsumerState<CartScreen> {
+  final _promoController = TextEditingController();
+
+  @override
+  void dispose() {
+    _promoController.dispose();
+    super.dispose();
+  }
+
+  void _applyPromo() {
+    final code = _promoController.text.trim();
+    if (code.isEmpty) return;
+    ref.read(cartProvider.notifier).applyPromoCode(code);
+  }
+
+  void _removePromo() {
+    _promoController.clear();
+    ref.read(cartProvider.notifier).removePromoCode();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cartState = ref.watch(cartProvider);
 
     return AppScaffold(
       safeArea: true,
-      // appBar: AppBar(),
       body: cartState.items.isEmpty
           ? _buildEmptyCart()
           : Column(
               children: [
                 Gap.h12,
-                // Cart Items
                 Expanded(
                   child: ListView.builder(
-                    // padding: const EdgeInsets.all(16),
                     itemCount: cartState.items.length,
                     itemBuilder: (context, index) {
                       final item = cartState.items[index];
@@ -70,6 +91,8 @@ class CartScreen extends ConsumerWidget {
                           ),
                         ),
                         const SizedBox(height: 16),
+
+                        // Subtotal row
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -92,6 +115,8 @@ class CartScreen extends ConsumerWidget {
                           ],
                         ),
                         const SizedBox(height: 8),
+
+                        // Tax row
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -113,7 +138,111 @@ class CartScreen extends ConsumerWidget {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 12),
+
+                        // Promo code input
+                        if (cartState.appliedPromoCode == null) ...[
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _promoController,
+                                  textCapitalization:
+                                      TextCapitalization.characters,
+                                  decoration: InputDecoration(
+                                    hintText: 'Promo code',
+                                    isDense: true,
+                                    contentPadding:
+                                        const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 10,
+                                        ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    errorText: cartState.promoError,
+                                  ),
+                                  onSubmitted: (_) => _applyPromo(),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                height: 40,
+                                child: ElevatedButton(
+                                  onPressed: cartState.isValidatingPromo
+                                      ? null
+                                      : _applyPromo,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primaryLaurel,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                    ),
+                                  ),
+                                  child: cartState.isValidatingPromo
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Text('Apply'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ] else ...[
+                          // Applied promo row
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.local_offer,
+                                    size: 16,
+                                    color: Colors.green,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    cartState.appliedPromoCode!,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.green,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  GestureDetector(
+                                    onTap: _removePromo,
+                                    child: const Icon(
+                                      Icons.close,
+                                      size: 16,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                '-\$${cartState.promoDiscount.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+
                         const Divider(height: 24),
+
+                        // Total row
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -139,7 +268,6 @@ class CartScreen extends ConsumerWidget {
                         SizedBox(
                           width: double.infinity,
                           child: context.primaryButton(
-                            // isLoading: authState.isLoading,
                             onPressed: () {
                               context.pushNamed(RoutePaths.checkout);
                             },

@@ -6,9 +6,7 @@ import 'package:smilestreatsapp/core/constants/app_colors.dart';
 import 'package:smilestreatsapp/core/routes/route_endpoint.dart';
 import 'package:smilestreatsapp/core/utils/extensions/button_extensions.dart';
 import 'package:smilestreatsapp/feature/auth/presentation/providers/auth_provider.dart';
-// import '../../../../core/constants/app_icons_const.dart';
 import '../../../../core/services/shipo_service.dart';
-// import '../../../../core/services/stripe_service.dart';
 import '../../../../core/services/authorize_net_service.dart';
 import '../../../auth/domain/models/user_model.dart';
 import '../../../cart/presentation/providers/cart_provider.dart';
@@ -28,7 +26,6 @@ class CheckoutScreen extends ConsumerStatefulWidget {
 }
 
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
-  // TextEditingControllers for each field
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
@@ -39,7 +36,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final TextEditingController _zipCodeController = TextEditingController();
   final TextEditingController _countryController = TextEditingController();
   bool _isLoading = false;
-  // String _selectedPaymentMethod = 'stripe';
   String _selectedPaymentMethod = 'authorize_net';
 
   final GeoService _geoService = GeoService();
@@ -48,16 +44,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   List<String> _zipCodes = [];
   bool _isLoadingZips = false;
 
-  // Shipping Rates
-  List<dynamic> _shippingRates = [];
+  String? _shippoAddressId;
+  List<Map<String, dynamic>> _shippingRates = [];
   Map<String, dynamic>? _selectedRate;
   bool _isFetchingRates = false;
-  String? _shippoAddressId;
+  String? _rateError;
 
   @override
   void initState() {
     super.initState();
-    // Pre-fill form with user data when screen loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _prefillFormWithUserData();
     });
@@ -66,7 +61,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   void _prefillFormWithUserData() {
     final user = ref.read(authProvider).user;
     if (user != null) {
-      // Split display name into first and last name
       if (user.displayName != null && user.displayName!.isNotEmpty) {
         final nameParts = user.displayName!.split(' ');
         if (nameParts.length >= 2) {
@@ -76,38 +70,26 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           _firstNameController.text = user.displayName!;
         }
       }
-
-      // Fill email if available
       if (user.email != null && user.email!.isNotEmpty) {
         _emailController.text = user.email!;
       }
-
-      // Fill phone number if available
       if (user.phoneNumber != null && user.phoneNumber!.isNotEmpty) {
         _phoneNumberController.text = user.phoneNumber!;
       }
-
-      // Fill address information if available
       if (user.streetAddress != null && user.streetAddress!.isNotEmpty) {
         _addressController.text = user.streetAddress!;
       }
-
       if (user.city != null && user.city!.isNotEmpty) {
         _cityController.text = user.city!;
       }
-
       if (user.state != null && user.state!.isNotEmpty) {
         _stateController.text = user.state!;
       }
-
       if (user.zipCode != null && user.zipCode!.isNotEmpty) {
         _zipCodeController.text = user.zipCode!;
       }
-
-      // Set default country to United States if user doesn't have country data
       _countryController.text = 'United States';
 
-      // Update the form provider with initial values
       final formNotifier = ref.read(checkoutFormProvider.notifier);
       formNotifier.updateField('firstName', _firstNameController.text);
       formNotifier.updateField('lastName', _lastNameController.text);
@@ -118,7 +100,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       formNotifier.updateField('state', _stateController.text);
       formNotifier.updateField('zipCode', _zipCodeController.text);
       formNotifier.updateField('country', _countryController.text);
-
     }
   }
 
@@ -251,9 +232,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               Text(
                 title,
                 style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                    fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -267,10 +246,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 onChanged: (value) {
                   setModalState(() {
                     filteredItems = items
-                        .where(
-                          (item) =>
-                              item.toLowerCase().contains(value.toLowerCase()),
-                        )
+                        .where((item) =>
+                            item.toLowerCase().contains(value.toLowerCase()))
                         .toList();
                   });
                 },
@@ -296,7 +273,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   @override
   void dispose() {
-    // Dispose all controllers
     _firstNameController.dispose();
     _lastNameController.dispose();
     _emailController.dispose();
@@ -311,17 +287,228 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   void _updateFormField(String field, String value) {
     ref.read(checkoutFormProvider.notifier).updateField(field, value);
+  }
 
-    // Reset shipping rates if address-related fields change
-    final addressFields = ['address', 'city', 'state', 'zipCode', 'country'];
-    if (addressFields.contains(field)) {
-      if (mounted && _shippingRates.isNotEmpty) {
-        setState(() {
-          _shippingRates = [];
-          _selectedRate = null;
-        });
-      }
+  Future<void> _fetchShippingRates(CheckoutFormState formState) async {
+    if (formState.address.isEmpty ||
+        formState.city.isEmpty ||
+        formState.state.isEmpty ||
+        formState.zipCode.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill in your full address first'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
     }
+
+    setState(() {
+      _isFetchingRates = true;
+      _shippingRates = [];
+      _selectedRate = null;
+      _rateError = null;
+    });
+
+    try {
+      final shippoService = ShippoService();
+      String phoneInput = formState.phoneNumber.trim();
+      String formattedPhone =
+          phoneInput.startsWith('+') ? phoneInput : '+1$phoneInput';
+      formattedPhone = formattedPhone.replaceAll(RegExp(r'[^0-9+]'), '');
+
+      final addressResult = await shippoService.createAddress(
+        name: '${formState.firstName} ${formState.lastName}',
+        street1: formState.address,
+        city: formState.city,
+        state: getStateCode(formState.state, 'US'),
+        zip: formState.zipCode,
+        country: 'US',
+        phone: formattedPhone.isNotEmpty ? formattedPhone : null,
+        email: formState.email.isNotEmpty ? formState.email : null,
+        isResidential: true,
+      );
+
+      if (addressResult == null || addressResult['object_id'] == null) {
+        setState(() {
+          _rateError = 'Could not validate address. Please check your details.';
+          _isFetchingRates = false;
+        });
+        return;
+      }
+
+      _shippoAddressId = addressResult['object_id'];
+
+      final shipmentResult = await shippoService.createShipment(
+        addressToId: _shippoAddressId!,
+      );
+
+      if (shipmentResult == null || shipmentResult['status'] == 'error') {
+        setState(() {
+          _rateError = 'Could not fetch shipping rates. Please try again.';
+          _isFetchingRates = false;
+        });
+        return;
+      }
+
+      final rates = (shipmentResult['rates'] as List?)
+          ?.cast<Map<String, dynamic>>()
+          .where((r) =>
+              r['amount'] != null &&
+              double.tryParse(r['amount'].toString()) != null)
+          .toList() ?? [];
+
+      rates.sort((a, b) =>
+          double.parse(a['amount'].toString())
+              .compareTo(double.parse(b['amount'].toString())));
+
+      setState(() {
+        _shippingRates = rates;
+        _isFetchingRates = false;
+        if (rates.isEmpty) {
+          _rateError = 'No shipping rates available for this address.';
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _rateError = 'Error fetching rates: ${e.toString()}';
+        _isFetchingRates = false;
+      });
+    }
+  }
+
+  Widget _buildShippingRatesSection(CheckoutFormState formState) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Shipping Options',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: AppColors.primaryLaurel,
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (_isFetchingRates)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Column(
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 8),
+                    Text('Fetching shipping rates...', style: TextStyle(color: Colors.grey)),
+                  ],
+                ),
+              ),
+            )
+          else if (_rateError != null)
+            Column(
+              children: [
+                Text(_rateError!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => _fetchShippingRates(formState),
+                    child: const Text('Retry'),
+                  ),
+                ),
+              ],
+            )
+          else if (_shippingRates.isEmpty)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _fetchShippingRates(formState),
+                icon: const Icon(Icons.local_shipping_outlined, color: Colors.white),
+                label: const Text('Get Shipping Rates', style: TextStyle(color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryLaurel,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            )
+          else
+            Column(
+              children: [
+                ..._shippingRates.map((rate) {
+                  final isSelected = _selectedRate?['object_id'] == rate['object_id'];
+                  final amount = double.tryParse(rate['amount'].toString()) ?? 0.0;
+                  final provider = rate['provider'] ?? '';
+                  final serviceName = rate['servicelevel']?['name'] ?? '';
+                  final estDays = rate['estimated_days'];
+
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedRate = rate),
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: isSelected ? AppColors.primaryLaurel : Colors.grey[300]!,
+                          width: isSelected ? 2 : 1,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        color: isSelected
+                            ? AppColors.primaryLaurel.withValues(alpha: 0.05)
+                            : Colors.white,
+                      ),
+                      child: Row(
+                        children: [
+                          Radio<String>(
+                            value: rate['object_id'],
+                            groupValue: _selectedRate?['object_id'],
+                            onChanged: (_) => setState(() => _selectedRate = rate),
+                            activeColor: AppColors.primaryLaurel,
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '$provider — $serviceName',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                if (estDays != null)
+                                  Text(
+                                    'Est. $estDays day${estDays == 1 ? '' : 's'}',
+                                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            '\$${amount.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+                TextButton(
+                  onPressed: () => _fetchShippingRates(formState),
+                  child: const Text('Refresh rates'),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -333,9 +520,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final checkoutItems = widget.buyNowItem != null
         ? [widget.buyNowItem!]
         : cartState.items;
-    final double total = widget.buyNowItem != null
+
+    final double itemsTotal = widget.buyNowItem != null
         ? widget.buyNowItem!.totalPrice
         : cartState.total;
+
+    final double shippingCost = _selectedRate != null
+        ? (double.tryParse(_selectedRate!['amount'].toString()) ?? 0.0)
+        : 0.0;
+    final double grandTotal = itemsTotal + shippingCost;
 
     return Scaffold(
       appBar: AppBar(
@@ -347,49 +540,50 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       body: cartState.isLoading
           ? const Center(child: CircularProgressIndicator())
           : cartState.errorMessage != null
-          ? Center(child: Text('Error: ${cartState.errorMessage}'))
-          : checkoutItems.isEmpty
-          ? const Center(child: Text('Your cart is empty'))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // User info banner
-                  if (user != null) _buildUserInfoBanner(user),
-                  _buildShippingSection(ref, formState, context),
-                  if (_isFetchingRates)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: CircularProgressIndicator(),
-                    )
-                  else if (_shippingRates.isNotEmpty)
-                    _buildShippingRatesSection(),
-                  const SizedBox(height: 24),
-                  _buildPaymentSection(),
-                  const SizedBox(height: 32),
-                  _buildContinueButton(
-                    ref,
-                    checkoutItems,
-                    total +
-                        (double.tryParse(_selectedRate?['amount'] ?? '0') ?? 0),
-                    formState,
-                  ),
-                  if (_isLoading) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      _loadingMessage,
-                      style: const TextStyle(
-                        color: AppColors.primaryLaurel,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 14,
+              ? Center(child: Text('Error: ${cartState.errorMessage}'))
+              : checkoutItems.isEmpty
+                  ? const Center(child: Text('Your cart is empty'))
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          if (user != null) _buildUserInfoBanner(user),
+                          _buildShippingSection(ref, formState, context),
+                          const SizedBox(height: 24),
+                          _buildShippingRatesSection(formState),
+                          const SizedBox(height: 24),
+                          _buildOrderSummary(
+                            itemsTotal: itemsTotal,
+                            shippingCost: shippingCost,
+                            grandTotal: grandTotal,
+                            promoDiscount: cartState.promoDiscount,
+                          ),
+                          const SizedBox(height: 24),
+                          _buildPaymentSection(),
+                          const SizedBox(height: 32),
+                          _buildPayButton(
+                            ref,
+                            checkoutItems,
+                            grandTotal,
+                            formState,
+                            shippingCost,
+                          ),
+                          if (_isLoading) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              _loadingMessage,
+                              style: const TextStyle(
+                                color: AppColors.primaryLaurel,
+                                fontWeight: FontWeight.w500,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 32),
+                        ],
                       ),
                     ),
-                  ],
-                  const SizedBox(height: 32),
-                ],
-              ),
-            ),
     );
   }
 
@@ -402,8 +596,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         color: AppColors.primaryLaurel.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: AppColors.primaryLaurel.withValues(alpha: 0.3),
-        ),
+            color: AppColors.primaryLaurel.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -427,6 +620,92 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     style: const TextStyle(fontSize: 12, color: Colors.grey),
                   ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOrderSummary({
+    required double itemsTotal,
+    required double shippingCost,
+    required double grandTotal,
+    required double promoDiscount,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Order Summary',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: AppColors.primaryLaurel,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _summaryRow('Subtotal', '\$${itemsTotal.toStringAsFixed(2)}'),
+          if (promoDiscount > 0)
+            _summaryRow(
+              'Promo Discount',
+              '-\$${promoDiscount.toStringAsFixed(2)}',
+              valueColor: Colors.green,
+            ),
+          const SizedBox(height: 8),
+          _summaryRow(
+            'Shipping',
+            _selectedRate == null
+                ? 'Select a shipping option'
+                : '\$${shippingCost.toStringAsFixed(2)}',
+            valueColor: _selectedRate == null ? Colors.grey : null,
+          ),
+          const Divider(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Total',
+                style:
+                    TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+              Text(
+                '\$${grandTotal.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primaryLaurel,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryRow(String label, String value, {Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: const TextStyle(fontSize: 14, color: Colors.grey)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: valueColor ?? Colors.black87,
             ),
           ),
         ],
@@ -479,7 +758,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          // Email and Phone Stacked
           _buildTextField(
             controller: _emailController,
             field: 'email',
@@ -560,41 +838,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          // Stripe option
-          // GestureDetector(
-          //   onTap: () => setState(() => _selectedPaymentMethod = 'stripe'),
-          //   child: Container(
-          //     decoration: BoxDecoration(
-          //       border: Border.all(
-          //         color: _selectedPaymentMethod == 'stripe'
-          //             ? Colors.blue[300]!
-          //             : Colors.grey[300]!,
-          //         width: _selectedPaymentMethod == 'stripe' ? 2 : 1,
-          //       ),
-          //       borderRadius: BorderRadius.circular(8),
-          //     ),
-          //     child: Row(
-          //       children: [
-          //         Radio<String>(
-          //           value: 'stripe',
-          //           groupValue: _selectedPaymentMethod,
-          //           onChanged: (value) =>
-          //               setState(() => _selectedPaymentMethod = value!),
-          //           activeColor: Colors.blue,
-          //         ),
-          //         const Text(
-          //           'Pay With Stripe',
-          //           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
-          //         ),
-          //         const Spacer(),
-          //         Image.asset(AssetsPath.stripeLogo, height: 40, width: 40),
-          //         Gap.w8,
-          //       ],
-          //     ),
-          //   ),
-          // ),
-          // const SizedBox(height: 12),
-          // Authorize.net option
           GestureDetector(
             onTap: () =>
                 setState(() => _selectedPaymentMethod = 'authorize_net'),
@@ -619,10 +862,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   ),
                   const Text(
                     'Pay With Authorize.net',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
+                    style: TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w400),
                   ),
                   const Spacer(),
-                  const Icon(Icons.credit_card, color: Colors.orange, size: 28),
+                  const Icon(Icons.credit_card,
+                      color: Colors.orange, size: 28),
                   Gap.w8,
                 ],
               ),
@@ -655,7 +900,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         GestureDetector(
           onTap: enabled ? onTap : null,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             decoration: BoxDecoration(
               border: Border.all(color: AppColors.iconDeselectedColor),
               borderRadius: BorderRadius.circular(4),
@@ -665,7 +911,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    controller.text.isEmpty ? 'Select $label' : controller.text,
+                    controller.text.isEmpty
+                        ? 'Select $label'
+                        : controller.text,
                     style: TextStyle(
                       color: controller.text.isEmpty
                           ? Colors.grey
@@ -682,11 +930,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 else
-                  Icon(
-                    Icons.arrow_drop_down,
-                    color: Colors.grey[600],
-                    size: 20,
-                  ),
+                  Icon(Icons.arrow_drop_down,
+                      color: Colors.grey[600], size: 20),
               ],
             ),
           ),
@@ -718,11 +963,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             if (isRequired)
               const Text(
                 ' *',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w400,
-                  color: Colors.red,
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.red),
               ),
           ],
         ),
@@ -730,9 +971,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         TextFormField(
           controller: controller,
           keyboardType: keyboardType,
-          onChanged: (value) {
-            _updateFormField(field, value);
-          },
+          onChanged: (value) => _updateFormField(field, value),
           decoration: InputDecoration(
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
@@ -741,11 +980,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             isDense: true,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: AppColors.iconDeselectedColor),
+              borderSide:
+                  BorderSide(color: AppColors.iconDeselectedColor),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: AppColors.iconDeselectedColor),
+              borderSide:
+                  BorderSide(color: AppColors.iconDeselectedColor),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(4),
@@ -759,440 +1000,62 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     );
   }
 
-  Widget _buildContinueButton(
+  Widget _buildPayButton(
     WidgetRef ref,
     List<CartItem> cartItems,
     double total,
     CheckoutFormState formState,
+    double shippingCost,
   ) {
-    String buttonText = 'Continue to Payment';
-    if (_isFetchingRates) {
-      buttonText = 'Checking Rates...';
-    } else if (_shippingRates.isNotEmpty && _selectedRate == null) {
-      buttonText = 'Select Shipping Method';
-    } else if (_selectedRate != null) {
-      buttonText = 'Pay ${_selectedRate!['amount']} & Place Order';
-    }
-
     return SizedBox(
       width: 250,
       child: ref.context.primaryButton(
         isLoading: _isLoading,
         onPressed: () {
-          if (_isFetchingRates) return;
-          if (formState.isValid) {
-            if (_shippingRates.isNotEmpty && _selectedRate == null) {
-              ScaffoldMessenger.of(ref.context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please select a shipping method'),
-                  backgroundColor: Colors.orange,
-                ),
-              );
-              return;
-            }
-            _processPayment(ref, cartItems, total, formState);
-          } else {
+          if (!formState.isValid) {
             ScaffoldMessenger.of(ref.context).showSnackBar(
               const SnackBar(
                 content: Text('Please fill all required fields'),
                 backgroundColor: Colors.red,
               ),
             );
+            return;
           }
+          _showCardInputSheet(ref, cartItems, total, formState, shippingCost);
         },
-        text: buttonText,
+        text: 'Pay \$${total.toStringAsFixed(2)} & Place Order',
       ),
     );
   }
 
-  String _loadingMessage = 'Continue to Payment';
+  String _loadingMessage = 'Processing...';
 
-  Future<void> _processPayment(
-    WidgetRef ref,
-    List<CartItem> cartItems,
-    double total,
-    CheckoutFormState formState,
-  ) async {
-    // If rates are already fetched we should proceed to payment
-    if (_shippingRates.isNotEmpty && _selectedRate != null) {
-      if (_selectedPaymentMethod == 'authorize_net') {
-        _showCardInputSheet(ref, cartItems, total, formState);
-      }
-      // else {
-      //   _proceedToStripePayment(ref, cartItems, total, formState);
-      // }
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _loadingMessage = 'Verifying Address...';
-    });
+  Future<void> _createShippoAddressAsync(CheckoutFormState formState) async {
     try {
-      DPrint.log('Step 1: Verifying Shipping Address with Shippo...');
-
       final shippoService = ShippoService();
-
-      // Format phone number with selected country code
       String phoneInput = formState.phoneNumber.trim();
-      String formattedPhone;
-      if (phoneInput.startsWith('+')) {
-        formattedPhone = phoneInput;
-      } else {
-        formattedPhone = '+1$phoneInput';
-      }
+      String formattedPhone =
+          phoneInput.startsWith('+') ? phoneInput : '+1$phoneInput';
       formattedPhone = formattedPhone.replaceAll(RegExp(r'[^0-9+]'), '');
 
-      final String countryCode = _getCountryCode(formState.country);
       final addressResult = await shippoService.createAddress(
         name: '${formState.firstName} ${formState.lastName}',
         street1: formState.address,
         city: formState.city,
-        state: getStateCode(formState.state, countryCode),
+        state: getStateCode(formState.state, 'US'),
         zip: formState.zipCode,
-        country: countryCode,
+        country: 'US',
         phone: formattedPhone,
         email: formState.email,
         isResidential: true,
         metadata: 'Customer Order',
       );
-
-      DPrint.log('Shippo address creation result: $addressResult');
-
-      if (addressResult == null) {
-        throw Exception(
-          'Failed to connect to shipping service. Please check your internet connection.',
-        );
+      if (addressResult != null && addressResult['object_id'] != null) {
+        _shippoAddressId = addressResult['object_id'];
       }
-
-      if (addressResult['__all__'] != null ||
-          addressResult['status'] == 'error') {
-        String apiError = 'Validation Error';
-        if (addressResult['__all__'] != null &&
-            (addressResult['__all__'] as List).isNotEmpty) {
-          apiError = (addressResult['__all__'] as List).join('\n');
-        } else if (addressResult['message'] != null) {
-          apiError = addressResult['message'];
-        }
-        throw Exception(apiError);
-      }
-
-      final bool isComplete = addressResult['is_complete'] ?? false;
-      final validationResults = addressResult['validation_results'];
-      final bool hasValidationResult =
-          validationResults != null && validationResults.isNotEmpty;
-      final bool isValid =
-          !hasValidationResult || (validationResults['is_valid'] ?? false);
-      final List<dynamic> messages = validationResults?['messages'] ?? [];
-      final List<dynamic> rootMessages = addressResult['messages'] ?? [];
-      final bool hasErrorInMessages =
-          messages.any(
-            (m) => m['code'] == 'user_input_problem' || m['source'] == 'error',
-          ) ||
-          rootMessages.any(
-            (m) => m['code'] == 'user_input_problem' || m['source'] == 'error',
-          );
-
-      if ((hasValidationResult && !isValid) ||
-          !isComplete ||
-          hasErrorInMessages) {
-        String errorMessage = 'Invalid shipping address.';
-        if (messages.isNotEmpty) {
-          errorMessage = messages
-              .map((m) => m['text']?.toString() ?? 'Unknown error')
-              .join('\n');
-        } else if (rootMessages.isNotEmpty) {
-          errorMessage = rootMessages
-              .map((m) => m['text']?.toString() ?? 'Unknown error')
-              .join('\n');
-        }
-        throw Exception(errorMessage);
-      }
-
-      _shippoAddressId = addressResult['object_id'];
-
-      DPrint.log('Step 2: Address Verified. Fetching Shipping Rates...');
-      setState(() {
-        _isLoading = false;
-        _isFetchingRates = true;
-        _loadingMessage = 'Fetching Shipping Rates...';
-      });
-
-      final shipmentResult = await shippoService.createShipment(
-        addressToId: _shippoAddressId!,
-      );
-
-      DPrint.log('Shippo shipment result: $shipmentResult');
-
-      if (shipmentResult == null || shipmentResult['status'] == 'error') {
-        throw Exception(
-          shipmentResult?['message'] ?? 'Failed to fetch shipping rates',
-        );
-      }
-
-      final List<dynamic> rates = shipmentResult['rates'] ?? [];
-
-      if (rates.isEmpty) {
-        throw Exception('No shipping rates available for this address.');
-      }
-
-      if (mounted) {
-        setState(() {
-          _shippingRates = rates;
-          _isFetchingRates = false;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      DPrint.error('Checkout Error: $e');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _isFetchingRates = false;
-        });
-      }
-      if (ref.context.mounted) {
-        showDialog(
-          context: ref.context,
-          builder: (context) => AlertDialog(
-            title: const Text('Checkout Error'),
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      }
+    } catch (_) {
+      // Non-blocking: Shippo address is best-effort for tracking only
     }
-  }
-
-  // Future<void> _proceedToStripePayment(
-  //   WidgetRef ref,
-  //   List<CartItem> cartItems,
-  //   double total,
-  //   CheckoutFormState formState,
-  // ) async {
-  //   setState(() {
-  //     _isLoading = true;
-  //     _loadingMessage = 'Processing Payment...';
-  //   });
-
-  //   try {
-  //     DPrint.log('Proceeding to Stripe Payment with total: $total');
-
-  //     final paymentResult = await StripeService.processPayment(
-  //       amount: total,
-  //       currency: 'usd',
-  //       metadata: {
-  //         'customer_email': formState.email,
-  //         'order_items': cartItems.length.toString(),
-  //         'shippo_address_id': _shippoAddressId,
-  //         'shippo_rate_id': _selectedRate?['object_id'],
-  //       },
-  //     );
-
-  //     if (!paymentResult['success']) {
-  //       throw Exception(paymentResult['error'] ?? 'Payment failed');
-  //     }
-
-  //     final String realPaymentIntentId = paymentResult['paymentIntentId'];
-
-  //     DPrint.log(
-  //       "Payment processed successfully. PaymentIntent ID: $realPaymentIntentId",
-  //     );
-
-  //     DPrint.log('Creating Order in Database...');
-  //     setState(() {
-  //       _loadingMessage = 'Finalizing Order...';
-  //     });
-
-  //     String phoneInput = formState.phoneNumber.trim();
-  //     String formattedPhone = phoneInput.startsWith('+')
-  //         ? phoneInput
-  //         : '+1$phoneInput';
-  //     formattedPhone = formattedPhone.replaceAll(RegExp(r'[^0-9+]'), '');
-
-  //     final shippingAddress = ShippingAddress(
-  //       firstName: formState.firstName,
-  //       lastName: formState.lastName,
-  //       email: formState.email,
-  //       phoneNumber: formattedPhone,
-  //       address: formState.address,
-  //       city: formState.city,
-  //       state: formState.state,
-  //       zipCode: formState.zipCode,
-  //       country: formState.country,
-  //     );
-
-  //     final order = await ref
-  //         .read(orderProvider.notifier)
-  //         .createOrder(
-  //           items: cartItems,
-  //           shippingAddress: shippingAddress,
-  //           paymentIntentId: realPaymentIntentId,
-  //           metadata: {
-  //             'shippo_address_id': _shippoAddressId,
-  //             'shippo_rate_id': _selectedRate?['object_id'],
-  //             'shipping_cost': _selectedRate?['amount'],
-  //             'shipping_service': _selectedRate?['servicelevel']?['name'],
-  //           },
-  //         );
-
-  //     // Push order to Shippo dashboard for fulfillment
-  //     if (_shippoAddressId != null) {
-  //       setState(() => _loadingMessage = 'Syncing with Shippo...');
-  //       await ShippoService().createShippoOrder(
-  //         orderNumber: order.orderNumber ?? order.id,
-  //         toAddressId: _shippoAddressId!,
-  //         items: cartItems,
-  //         subtotal: order.subtotal,
-  //         total: order.total,
-  //         shippingCost: _selectedRate?['amount']?.toString(),
-  //         shippingMethod: _selectedRate?['servicelevel']?['name'],
-  //       );
-  //     }
-
-  //     if (widget.buyNowItem == null) {
-  //       await ref.read(cartProvider.notifier).clearCart();
-  //     }
-
-  //     ref.read(checkoutFormProvider.notifier).reset();
-
-  //     if (ref.context.mounted) {
-  //       GoRouter.of(ref.context).go(RoutePaths.orderConfirm, extra: order);
-  //     }
-  //   } catch (e) {
-  //     DPrint.error('Payment Error: $e');
-  //     if (ref.context.mounted) {
-  //       showDialog(
-  //         context: ref.context,
-  //         builder: (context) => AlertDialog(
-  //           title: const Text('Payment Error'),
-  //           content: Text(e.toString().replaceAll('Exception: ', '')),
-  //           actions: [
-  //             TextButton(
-  //               onPressed: () => Navigator.pop(context),
-  //               child: const Text('OK'),
-  //             ),
-  //           ],
-  //         ),
-  //       );
-  //     }
-  //   } finally {
-  //     if (mounted) {
-  //       setState(() {
-  //         _isLoading = false;
-  //         _loadingMessage = 'Continue to Payment';
-  //       });
-  //     }
-  //   }
-  // }
-
-  Widget _buildShippingRatesSection() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(top: 24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Select Shipping Method',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: AppColors.primaryLaurel,
-            ),
-          ),
-          const SizedBox(height: 16),
-          ..._shippingRates.map((rate) {
-            DPrint.log('Rate: $rate');
-
-            final bool isSelected =
-                _selectedRate?['object_id'] == rate['object_id'];
-            final String serviceName =
-                rate['servicelevel']?['name'] ?? 'Standard Shipping';
-            final String amount = '\$${rate['amount']}';
-            final String duration =
-                rate['duration_terms'] ?? 'Delivery time varies';
-
-            return GestureDetector(
-              onTap: () {
-                setState(() {
-                  _selectedRate = rate;
-                });
-              },
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: isSelected
-                        ? AppColors.primaryLaurel
-                        : Colors.grey[300]!,
-                    width: isSelected ? 2 : 1,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                  color: isSelected
-                      ? AppColors.primaryLaurel.withValues(alpha: 0.05)
-                      : Colors.white,
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      isSelected
-                          ? Icons.radio_button_checked
-                          : Icons.radio_button_off,
-                      color: isSelected ? AppColors.primaryLaurel : Colors.grey,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            serviceName,
-                            style: TextStyle(
-                              fontWeight: isSelected
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                              fontSize: 14,
-                            ),
-                          ),
-                          Text(
-                            duration,
-                            style: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      amount,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: AppColors.primaryLaurel,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
   }
 
   void _showCardInputSheet(
@@ -1200,6 +1063,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     List<CartItem> cartItems,
     double total,
     CheckoutFormState formState,
+    double shippingCost,
   ) {
     final cardNumberController = TextEditingController();
     final expiryController = TextEditingController();
@@ -1225,7 +1089,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             children: [
               const Text(
                 'Enter Card Details',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                style:
+                    TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -1291,13 +1156,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         parts[1].isEmpty) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
                         const SnackBar(
-                          content: Text('Invalid expiry. Use MM/YY format'),
+                          content:
+                              Text('Invalid expiry. Use MM/YY format'),
                         ),
                       );
                       return;
                     }
                     final expirationDate =
-                        '20${parts[1]}-${parts[0].padLeft(2, '0')}'; // YYYY-MM
+                        '20${parts[1]}-${parts[0].padLeft(2, '0')}';
                     Navigator.pop(ctx);
                     _proceedToAuthorizeNetPayment(
                       ref,
@@ -1307,11 +1173,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       cardNumberController.text.trim(),
                       expirationDate,
                       cvvController.text.trim(),
+                      shippingCost,
                     );
                   },
                   child: const Text(
                     'Pay Now',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
+                    style:
+                        TextStyle(color: Colors.white, fontSize: 16),
                   ),
                 ),
               ),
@@ -1331,6 +1199,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     String cardNumber,
     String expirationDate,
     String cardCode,
+    double shippingCost,
   ) async {
     setState(() {
       _isLoading = true;
@@ -1338,6 +1207,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     });
 
     try {
+      await _createShippoAddressAsync(formState);
+
       final paymentResult = await AuthorizeNetService.processPayment(
         amount: total,
         cardNumber: cardNumber,
@@ -1347,7 +1218,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         metadata: {
           'order_items': cartItems.length.toString(),
           'shippo_address_id': _shippoAddressId ?? '',
-          'shippo_rate_id': _selectedRate?['object_id'] ?? '',
         },
       );
 
@@ -1356,15 +1226,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       }
 
       final String transactionId = paymentResult['transactionId'];
-      DPrint.log(
-          'Authorize.net payment successful. TransactionId: $transactionId');
-
       setState(() => _loadingMessage = 'Finalizing Order...');
 
       String phoneInput = formState.phoneNumber.trim();
-      String formattedPhone = phoneInput.startsWith('+')
-          ? phoneInput
-          : '+1$phoneInput';
+      String formattedPhone =
+          phoneInput.startsWith('+') ? phoneInput : '+1$phoneInput';
       formattedPhone = formattedPhone.replaceAll(RegExp(r'[^0-9+]'), '');
 
       final shippingAddress = ShippingAddress(
@@ -1385,15 +1251,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             paymentIntentId: 'authnet_$transactionId',
             metadata: {
               'shippo_address_id': _shippoAddressId,
-              'shippo_rate_id': _selectedRate?['object_id'],
-              'shipping_cost': _selectedRate?['amount'],
-              'shipping_service': _selectedRate?['servicelevel']?['name'],
+              'shipping_cost': shippingCost.toStringAsFixed(2),
+              'shipping_type': 'flat_rate',
               'payment_gateway': 'authorize_net',
               'authorize_transaction_id': transactionId,
             },
           );
 
-      // Push order to Shippo dashboard for fulfillment
       if (_shippoAddressId != null) {
         setState(() => _loadingMessage = 'Syncing with Shippo...');
         await ShippoService().createShippoOrder(
@@ -1402,8 +1266,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           items: cartItems,
           subtotal: order.subtotal,
           total: order.total,
-          shippingCost: _selectedRate?['amount']?.toString(),
-          shippingMethod: _selectedRate?['servicelevel']?['name'],
+          shippingCost: shippingCost.toStringAsFixed(2),
+          shippingMethod: 'Flat Rate',
         );
       }
 
@@ -1437,29 +1301,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _loadingMessage = 'Continue to Payment';
+          _loadingMessage = 'Processing...';
         });
       }
     }
   }
-
-  String _getCountryCode(String countryName) {
-    return 'US';
-  }
-
-  // String _formatPhoneNumber(String phone, String countryName) {
-  //   // Remove all non-numeric characters except +
-  //   String cleaned = phone.replaceAll(RegExp(r'[^0-9+]'), '');
-
-  //   // Handle specific cases like "00" prefix for international calls
-  //   if (cleaned.startsWith('00')) {
-  //     cleaned = '+' + cleaned.substring(2);
-  //   }
-
-  //   // If it doesn't start with + and we have a country code, we could try to prepend it.
-  //   // For many carriers, + is essential for international shipments.
-  //   // But since the user might have already typed it, we just clean it.
-
-  //   return cleaned;
-  // }
 }
