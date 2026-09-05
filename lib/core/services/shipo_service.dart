@@ -6,7 +6,7 @@ import 'package:smilestreatsapp/feature/cart/domain/entities/cart_item.dart';
 
 class ShippoService {
   static const String baseUrl = 'https://api.goshippo.com';
-  static const String apiToken = shippoTestKey;
+  static const String apiToken = shippoLiveKey;
 
   Future<Map<String, dynamic>?> createAddress({
     required String name,
