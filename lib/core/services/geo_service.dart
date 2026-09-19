@@ -30,7 +30,7 @@ class GeoService {
   /// Returns all ZIP codes for a city in a US state (2-letter state code).
   Future<List<String>> getZipsForCity(String city, String stateCode) async {
     try {
-      final encodedCity = Uri.encodeComponent(city.toLowerCase().replaceAll(' ', '+'));
+      final encodedCity = Uri.encodeComponent(city.trim().toLowerCase());
       final response = await http.get(
         Uri.parse('https://api.zippopotam.us/us/${stateCode.toLowerCase()}/$encodedCity'),
       );
