@@ -3,8 +3,9 @@ description: "A new Flutter project."
 
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.7+7 # Android version 
-# version: 1.0.5+1 # iOS version
+# version: 1.0.8+8 # Andoid and IOS
+version: 1.0.9+9 # Android version 
+# version: 1.0.8+8 # iOS version
 
 environment:
   sdk: ^3.8.1

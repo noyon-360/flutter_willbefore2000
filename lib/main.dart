@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'core/routes/route_endpoint.dart';
 import 'core/services/notification_service.dart';
-import 'core/services/stripe_service.dart';
 import 'firebase_options.dart';
 
 import '../core/theme/app_theme.dart';
