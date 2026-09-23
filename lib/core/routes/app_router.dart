@@ -233,6 +233,22 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
 
       GoRoute(
+        path: RoutePaths.supportChat,
+        name: RoutePaths.supportChat,
+        pageBuilder: (context, state) {
+          return AppTransitions.slideTransition(
+            child: ChatScreen(
+              initialProduct: state.extra is ChatProductRef
+                  ? state.extra as ChatProductRef
+                  : null,
+            ),
+            context: context,
+            state: state,
+          );
+        },
+      ),
+
+      GoRoute(
         path: RoutePaths.orders,
         name: RoutePaths.orders,
         pageBuilder: (context, state) {

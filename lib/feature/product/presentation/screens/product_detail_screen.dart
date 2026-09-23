@@ -11,6 +11,7 @@ import '../../../../core/routes/route_endpoint.dart';
 import '../../../../core/utils/hero_tag_manager.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../cart/presentation/providers/cart_provider.dart';
+import '../../../chat/domain/models/chat_product_ref.dart';
 import '../../domain/entrity/product.dart';
 import '../providers/products_details_provider.dart';
 import '../providers/products_providers.dart';
@@ -251,6 +252,16 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             elevation: 0,
             pinned: true,
             automaticallyImplyLeading: true,
+            actions: [
+              IconButton(
+                tooltip: 'Ask about this product',
+                icon: const Icon(
+                  Icons.support_agent_outlined,
+                  color: AppColors.textAppBlack,
+                ),
+                onPressed: () => _askAboutProduct(context, product),
+              ),
+            ],
           ),
 
           SliverToBoxAdapter(
@@ -395,6 +406,26 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _askAboutProduct(BuildContext context, Product product) {
+    final authState = ref.read(authProvider);
+    if (!authState.isAuthenticated) {
+      LoginRequiredDialog.show(context);
+      return;
+    }
+
+    // Just carries the product as pending context into the chat screen —
+    // nothing is sent until the user types their own message about it.
+    context.pushNamed(
+      RoutePaths.supportChat,
+      extra: ChatProductRef(
+        id: product.id,
+        title: product.title,
+        image: product.imageUrls.isNotEmpty ? product.imageUrls.first : null,
+        price: product.effectivePrice,
       ),
     );
   }

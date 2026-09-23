@@ -7,6 +7,8 @@ import 'package:smilestreatsapp/feature/auth/presentation/screens/change_passwor
 import 'package:smilestreatsapp/feature/cart/domain/entities/cart_item.dart';
 import 'package:smilestreatsapp/feature/home/presentation/screens/home_screach_screen.dart';
 import 'package:smilestreatsapp/feature/main/presentation/screens/main_nav_screen.dart';
+import 'package:smilestreatsapp/feature/chat/domain/models/chat_product_ref.dart';
+import 'package:smilestreatsapp/feature/chat/presentation/screens/chat_screen.dart';
 import 'package:smilestreatsapp/feature/notification/presentation/screens/notification_screen.dart';
 import 'package:smilestreatsapp/feature/order/presentation/screens/order_confirmation_screen.dart';
 import 'package:smilestreatsapp/feature/order/presentation/screens/orders_screen.dart';
@@ -59,6 +61,8 @@ class RoutePaths {
   static const String checkout = '/checkout';
 
   static const String notification = '/notification';
+
+  static const String supportChat = '/support-chat';
 
   static const String appPrivacyPolicy = '/privacy-policy';
   static const String appTermsAndConditions = '/terms-and-conditions';

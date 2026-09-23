@@ -230,6 +230,23 @@ class AuthRemoteDataSource {
   Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
 
   Future<void> logout() async {
+    final user = _firebaseAuth.currentUser;
+    if (user != null) {
+      try {
+        final token = await _messaging.getToken();
+        if (token != null) {
+          await _firestore
+              .collection('users')
+              .doc(user.uid)
+              .collection('fcmTokens')
+              .doc(token)
+              .delete();
+        }
+        await _messaging.unsubscribeFromTopic('all_users');
+      } catch (e) {
+        DPrint.error("Failed to clean up FCM token on logout: $e");
+      }
+    }
     await _firebaseAuth.signOut();
   }
 

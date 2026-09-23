@@ -148,6 +148,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Support Chat Icon
+            IconButton(
+              onPressed: () {
+                final authState = ref.read(authProvider);
+                if (!authState.isAuthenticated) {
+                  LoginRequiredDialog.show(context);
+                } else {
+                  context.pushNamed(RoutePaths.supportChat);
+                }
+              },
+              icon: Icon(
+                Icons.support_agent_outlined,
+                color: AppColors.textAppBlack,
+                size: isTablet ? 26 : 24,
+              ),
+            ),
+
             // Orders Icon
             IconButton(
               onPressed: () {
