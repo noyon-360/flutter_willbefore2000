@@ -23,6 +23,12 @@ class ProductMigrationHelper {
       isActive: data['isActive'] ?? true,
       createdAt: _parseDateTime(data['createdAt']),
       updatedAt: _parseDateTime(data['updatedAt']),
+      viewCount: (data['viewCount'] ?? 0) as int,
+      cartAddCount: (data['cartAddCount'] ?? 0) as int,
+      orderCount: (data['orderCount'] ?? 0) as int,
+      ratingCount: (data['ratingCount'] ?? 0) as int,
+      averageRating: (data['averageRating'] ?? 0.0).toDouble(),
+      score: (data['score'] ?? 0.0).toDouble(),
     );
   }
 

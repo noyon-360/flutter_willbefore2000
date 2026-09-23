@@ -12,6 +12,8 @@ import '../../../../core/utils/hero_tag_manager.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../cart/presentation/providers/cart_provider.dart';
 import '../../../chat/domain/models/chat_product_ref.dart';
+import '../../../review/data/repositories/review_repository_impl.dart';
+import '../../../review/presentation/widgets/review_section.dart';
 import '../../domain/entrity/product.dart';
 import '../providers/products_details_provider.dart';
 import '../providers/products_providers.dart';
@@ -33,6 +35,16 @@ class ProductDetailScreen extends ConsumerStatefulWidget {
 
 class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   int _quantity = 1;
+  String? _viewRecordedProductId;
+
+  void _recordViewOnce(String productId) {
+    if (_viewRecordedProductId == productId) return;
+    _viewRecordedProductId = productId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(reviewRepositoryProvider).recordProductView(productId);
+    });
+  }
 
   void _updateQuantity(Product product, int newQuantity) {
     setState(() => _quantity = newQuantity);
@@ -235,6 +247,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     }
 
     final product = productsState.products[productIndex];
+    _recordViewOnce(product.id);
 
     final effectiveHeroTag =
         widget.heroTag ??
@@ -317,7 +330,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                       const Icon(Icons.star, size: 20, color: Colors.amber),
                       const SizedBox(width: 4),
                       Text(
-                        '4.8',
+                        product.ratingCount > 0
+                            ? product.averageRating.toStringAsFixed(1)
+                            : '—',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -326,7 +341,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        '(98 reviews)',
+                        '(${product.ratingCount} review${product.ratingCount == 1 ? '' : 's'})',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w400,
@@ -399,6 +414,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     productDetailState,
                     cartState,
                   ),
+
+                  const SizedBox(height: 32),
+
+                  ReviewSection(productId: product.id),
 
                   const SizedBox(height: 100),
                 ],

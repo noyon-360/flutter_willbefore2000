@@ -22,6 +22,7 @@ class AdvancedSearchState {
   final String sortBy;
   final double minPrice;
   final double maxPrice;
+  final Set<int> selectedRatings;
   final bool isLoading;
   final bool isLoadingMore; // Add this line
   final int currentPage;
@@ -40,6 +41,7 @@ class AdvancedSearchState {
     this.sortBy = 'relevance',
     this.minPrice = 0,
     this.maxPrice = 1000,
+    this.selectedRatings = const {},
     this.isLoading = false,
     this.isLoadingMore = false, // Initialize it
     this.currentPage = 1,
@@ -59,6 +61,7 @@ class AdvancedSearchState {
     String? sortBy,
     double? minPrice,
     double? maxPrice,
+    Set<int>? selectedRatings,
     bool? isLoading,
     bool? isLoadingMore, // Add this parameter
     int? currentPage,
@@ -77,6 +80,7 @@ class AdvancedSearchState {
       sortBy: sortBy ?? this.sortBy,
       minPrice: minPrice ?? this.minPrice,
       maxPrice: maxPrice ?? this.maxPrice,
+      selectedRatings: selectedRatings ?? this.selectedRatings,
       isLoading: isLoading ?? this.isLoading,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore, // Include it here
       currentPage: currentPage ?? this.currentPage,
@@ -183,12 +187,14 @@ class AdvancedSearchNotifier extends StateNotifier<AdvancedSearchState> {
     String? categoryId,
     double? minPrice,
     double? maxPrice,
+    Set<int>? selectedRatings,
   }) {
     state = state.copyWith(
       selectedCategory: category ?? state.selectedCategory,
       selectedCategoryId: categoryId ?? state.selectedCategoryId,
       minPrice: minPrice ?? state.minPrice,
       maxPrice: maxPrice ?? state.maxPrice,
+      selectedRatings: selectedRatings ?? state.selectedRatings,
       currentPage: 1,
     );
 
@@ -267,6 +273,14 @@ class AdvancedSearchNotifier extends StateNotifier<AdvancedSearchState> {
         return false;
       }
 
+      // Filter by rating - a product passes if it meets or exceeds at
+      // least one selected "N & up" threshold.
+      if (state.selectedRatings.isNotEmpty &&
+          !state.selectedRatings
+              .any((minRating) => product.averageRating >= minRating)) {
+        return false;
+      }
+
       return true;
     }).toList();
 
@@ -281,10 +295,13 @@ class AdvancedSearchNotifier extends StateNotifier<AdvancedSearchState> {
       case 'newest':
         filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         break;
+      case 'popularity':
+        filtered.sort((a, b) => b.score.compareTo(a.score));
+        break;
       case 'relevance':
       default:
-        // For search results, relevance is handled by fuzzy search
-        // For non-search, maybe sort by popularity or keep original order
+        // For search results, relevance is handled by fuzzy search.
+        // For non-search browsing, keep original (createdAt-desc) order.
         break;
     }
 

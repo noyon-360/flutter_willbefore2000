@@ -255,6 +255,7 @@ class _AdvancedSearchViewState extends ConsumerState<_AdvancedSearchView> {
               child: Text('Price: High to Low'),
             ),
             DropdownMenuItem(value: 'newest', child: Text('Newest')),
+            DropdownMenuItem(value: 'popularity', child: Text('Most Popular')),
           ],
           onChanged: (value) {
             if (value != null) {

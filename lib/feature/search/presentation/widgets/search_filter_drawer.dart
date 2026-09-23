@@ -347,6 +347,7 @@ class SearchFilterDrawer extends ConsumerWidget {
           category: filterState.selectedCategory,
           minPrice: filterState.priceRange.start,
           maxPrice: filterState.priceRange.end,
+          selectedRatings: filterState.selectedRatings,
         );
     Navigator.pop(context);
   }

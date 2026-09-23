@@ -84,10 +84,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               isLoading: categoriesState.isLoading,
             ),
 
-            // Most Popular Section
+            // Most Popular Section - ranked by the computed product score
+            // (rating, orders, cart-adds, views), not just recency.
             ProductSection(
               title: 'Most Popular',
-              products: productsState.products.take(4).toList(),
+              products: (List.of(productsState.products)
+                    ..sort((a, b) => b.score.compareTo(a.score)))
+                  .take(4)
+                  .toList(),
               isLoading: productsState.isLoading,
               onSeeAll: () => context.go(RoutePaths.search),
               isHorizontal: false,

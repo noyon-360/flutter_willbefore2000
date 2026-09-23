@@ -131,7 +131,9 @@ class ProductCard extends ConsumerWidget {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  '4.8',
+                                  product.ratingCount > 0
+                                      ? product.averageRating.toStringAsFixed(1)
+                                      : '—',
                                   style: TextStyle(
                                     fontSize: isSmallScreen ? 10 : 12,
                                     fontWeight: FontWeight.w500,
@@ -140,7 +142,7 @@ class ProductCard extends ConsumerWidget {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  '(98)',
+                                  '(${product.ratingCount})',
                                   style: TextStyle(
                                     fontSize: isSmallScreen ? 10 : 12,
                                     fontWeight: FontWeight.w400,
@@ -342,7 +344,9 @@ class ProductCard extends ConsumerWidget {
                           const Icon(Icons.star, size: 14, color: Colors.amber),
                           const SizedBox(width: 4),
                           Text(
-                            '4.8',
+                            product.ratingCount > 0
+                                ? product.averageRating.toStringAsFixed(1)
+                                : '—',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
@@ -351,7 +355,7 @@ class ProductCard extends ConsumerWidget {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '(98)',
+                            '(${product.ratingCount})',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w400,

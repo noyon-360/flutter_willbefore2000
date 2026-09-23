@@ -18,6 +18,12 @@ class ProductModel {
   final bool isActive;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final int viewCount;
+  final int cartAddCount;
+  final int orderCount;
+  final int ratingCount;
+  final double averageRating;
+  final double score;
 
   const ProductModel({
     required this.id,
@@ -36,6 +42,12 @@ class ProductModel {
     this.isActive = true,
     required this.createdAt,
     required this.updatedAt,
+    this.viewCount = 0,
+    this.cartAddCount = 0,
+    this.orderCount = 0,
+    this.ratingCount = 0,
+    this.averageRating = 0.0,
+    this.score = 0.0,
   });
 
   // Create from Firestore DocumentSnapshot
@@ -59,6 +71,12 @@ class ProductModel {
       isActive: data['isActive'] ?? true,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      viewCount: (data['viewCount'] ?? 0) as int,
+      cartAddCount: (data['cartAddCount'] ?? 0) as int,
+      orderCount: (data['orderCount'] ?? 0) as int,
+      ratingCount: (data['ratingCount'] ?? 0) as int,
+      averageRating: (data['averageRating'] ?? 0.0).toDouble(),
+      score: (data['score'] ?? 0.0).toDouble(),
     );
   }
 
@@ -82,9 +100,15 @@ class ProductModel {
       createdAt: data['createdAt'] is Timestamp 
           ? (data['createdAt'] as Timestamp).toDate()
           : DateTime.fromMillisecondsSinceEpoch(data['createdAt'] ?? 0),
-      updatedAt: data['updatedAt'] is Timestamp 
+      updatedAt: data['updatedAt'] is Timestamp
           ? (data['updatedAt'] as Timestamp).toDate()
           : DateTime.fromMillisecondsSinceEpoch(data['updatedAt'] ?? 0),
+      viewCount: (data['viewCount'] ?? 0) as int,
+      cartAddCount: (data['cartAddCount'] ?? 0) as int,
+      orderCount: (data['orderCount'] ?? 0) as int,
+      ratingCount: (data['ratingCount'] ?? 0) as int,
+      averageRating: (data['averageRating'] ?? 0.0).toDouble(),
+      score: (data['score'] ?? 0.0).toDouble(),
     );
   }
 
@@ -149,6 +173,12 @@ class ProductModel {
       isActive: isActive,
       createdAt: createdAt,
       updatedAt: updatedAt,
+      viewCount: viewCount,
+      cartAddCount: cartAddCount,
+      orderCount: orderCount,
+      ratingCount: ratingCount,
+      averageRating: averageRating,
+      score: score,
     );
   }
 
@@ -171,6 +201,12 @@ class ProductModel {
       isActive: product.isActive,
       createdAt: product.createdAt,
       updatedAt: product.updatedAt,
+      viewCount: product.viewCount,
+      cartAddCount: product.cartAddCount,
+      orderCount: product.orderCount,
+      ratingCount: product.ratingCount,
+      averageRating: product.averageRating,
+      score: product.score,
     );
   }
 
