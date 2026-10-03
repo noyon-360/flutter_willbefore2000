@@ -1257,7 +1257,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             metadata: {
               'shippo_address_id': _shippoAddressId,
               'shipping_cost': shippingCost.toStringAsFixed(2),
-              'shipping_type': 'flat_rate',
+              'shipping_type': 'shippo_rate',
+              'shipping_provider': _selectedRate?['provider'],
+              'shipping_service_token': _selectedRate?['servicelevel']?['token'],
+              'shipping_service_name': _selectedRate?['servicelevel']?['name'],
+              'shipping_est_days': _selectedRate?['estimated_days'],
               'payment_gateway': 'authorize_net',
               'authorize_transaction_id': transactionId,
             },
@@ -1272,7 +1276,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           subtotal: order.subtotal,
           total: order.total,
           shippingCost: shippingCost.toStringAsFixed(2),
-          shippingMethod: 'Flat Rate',
+          shippingMethod: _selectedRate != null
+              ? '${_selectedRate!['provider']} ${_selectedRate!['servicelevel']?['name'] ?? ''}'.trim()
+              : 'Flat Rate',
         );
       }
 

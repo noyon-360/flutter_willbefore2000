@@ -17,6 +17,7 @@ class OrderModel {
   final String? paymentIntentId;
   final String? trackingNumber;
   final DateTime? updatedAt;
+  final Map<String, dynamic>? metadata;
 
   const OrderModel({
     required this.id,
@@ -32,6 +33,7 @@ class OrderModel {
     this.paymentIntentId,
     this.trackingNumber,
     this.updatedAt,
+    this.metadata,
   });
 
   factory OrderModel.fromEntity(Order order) {
@@ -49,6 +51,7 @@ class OrderModel {
       paymentIntentId: order.paymentIntentId,
       trackingNumber: order.trackingNumber,
       updatedAt: order.updatedAt,
+      metadata: order.metadata,
     );
   }
 
@@ -76,6 +79,9 @@ class OrderModel {
       paymentIntentId: data['paymentIntentId'],
       trackingNumber: data['trackingNumber'],
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      metadata: data['metadata'] is Map
+          ? Map<String, dynamic>.from(data['metadata'])
+          : null,
     );
   }
 
@@ -97,6 +103,7 @@ class OrderModel {
       'paymentIntentId': paymentIntentId,
       'trackingNumber': trackingNumber,
       'updatedAt': FieldValue.serverTimestamp(),
+      if (metadata != null) 'metadata': metadata,
     };
   }
 
@@ -118,6 +125,7 @@ class OrderModel {
       paymentIntentId: paymentIntentId,
       trackingNumber: trackingNumber,
       updatedAt: updatedAt,
+      metadata: metadata,
     );
   }
 }
