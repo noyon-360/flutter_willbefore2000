@@ -54,6 +54,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   @override
   void initState() {
     super.initState();
+    _geoService.ensureLoaded();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _prefillFormWithUserData();
     });
@@ -115,6 +116,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     _updateFormField('zipCode', '');
   }
 
+  /// After a city pick, loads its ZIP options and auto-selects when there is only one.
   Future<void> _fetchZipsForCity(String city, String stateCode) async {
     setState(() {
       _isLoadingZips = true;
@@ -123,7 +125,27 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     });
     _updateFormField('zipCode', '');
     final zips = await _geoService.getZipsForCity(city, stateCode);
-    if (mounted) setState(() { _zipCodes = zips; _isLoadingZips = false; });
+    if (!mounted) return;
+    setState(() {
+      _zipCodes = zips;
+      _isLoadingZips = false;
+      if (zips.length == 1) _zipCodeController.text = zips.first;
+    });
+    if (zips.length == 1) _updateFormField('zipCode', zips.first);
+  }
+
+  /// Fills state, city and ZIP from a ZIP search hit in the city picker.
+  void _applyZipPlace(String zip, ZipPlace place) {
+    setState(() {
+      _stateController.text = place.stateName;
+      _cityController.text = place.city;
+      _zipCodeController.text = zip;
+      _cities = _geoService.getCitiesForState(place.stateName);
+      _zipCodes = [zip];
+    });
+    _updateFormField('state', place.stateName);
+    _updateFormField('city', place.city);
+    _updateFormField('zipCode', zip);
   }
 
   void _showStatePicker() {
@@ -171,6 +193,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         return _buildSearchableList(
           title: 'Select City',
           items: _cities,
+          hint: "Can't find your city? Search by ZIP code",
+          zipMatch: (query) => _geoService.placeForZip(query),
+          onZipSelect: (zip, place) {
+            Navigator.pop(context);
+            _applyZipPlace(zip, place);
+          },
           onSelect: (city) {
             setState(() { _cityController.text = city; });
             _updateFormField('city', city);
@@ -221,8 +249,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     required String title,
     required List<String> items,
     required Function(String) onSelect,
+    String? hint,
+    ZipPlace? Function(String query)? zipMatch,
+    void Function(String zip, ZipPlace place)? onZipSelect,
   }) {
     List<String> filteredItems = List.from(items);
+    String query = '';
     return StatefulBuilder(
       builder: (context, setModalState) {
         return Container(
@@ -238,7 +270,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               const SizedBox(height: 16),
               TextField(
                 decoration: InputDecoration(
-                  hintText: 'Search...',
+                  hintText: hint ?? 'Search...',
                   prefixIcon: const Icon(Icons.search),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -246,6 +278,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 ),
                 onChanged: (value) {
                   setModalState(() {
+                    query = value.trim();
                     filteredItems = items
                         .where((item) =>
                             item.toLowerCase().contains(value.toLowerCase()))
@@ -254,6 +287,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 },
               ),
               const SizedBox(height: 16),
+              Builder(builder: (_) {
+                final place = zipMatch?.call(query);
+                if (place == null || onZipSelect == null) {
+                  return const SizedBox.shrink();
+                }
+                return ListTile(
+                  leading: const Icon(Icons.location_on_outlined),
+                  title: Text('${place.city}, ${place.stateCode} $query'),
+                  onTap: () => onZipSelect(query, place),
+                );
+              }),
               Expanded(
                 child: ListView.builder(
                   itemCount: filteredItems.length,
