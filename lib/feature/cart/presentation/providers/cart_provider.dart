@@ -15,7 +15,9 @@ class CartState {
   final bool isLoading;
   final String? errorMessage;
   final String? appliedPromoCode;
-  final double promoDiscount;
+  final double promoPercentage;
+  final double? promoFixedAmount;
+  final double? promoMinimumOrder;
   final bool isValidatingPromo;
   final String? promoError;
 
@@ -24,7 +26,9 @@ class CartState {
     this.isLoading = false,
     this.errorMessage,
     this.appliedPromoCode,
-    this.promoDiscount = 0.0,
+    this.promoPercentage = 0.0,
+    this.promoFixedAmount,
+    this.promoMinimumOrder,
     this.isValidatingPromo = false,
     this.promoError,
   });
@@ -34,7 +38,9 @@ class CartState {
     bool? isLoading,
     String? errorMessage,
     String? appliedPromoCode,
-    double? promoDiscount,
+    double? promoPercentage,
+    double? promoFixedAmount,
+    double? promoMinimumOrder,
     bool? isValidatingPromo,
     String? promoError,
     bool clearPromo = false,
@@ -46,7 +52,12 @@ class CartState {
       isLoading: isLoading ?? this.isLoading,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       appliedPromoCode: clearPromo ? null : (appliedPromoCode ?? this.appliedPromoCode),
-      promoDiscount: clearPromo ? 0.0 : (promoDiscount ?? this.promoDiscount),
+      promoPercentage:
+          clearPromo ? 0.0 : (promoPercentage ?? this.promoPercentage),
+      promoFixedAmount:
+          clearPromo ? null : (promoFixedAmount ?? this.promoFixedAmount),
+      promoMinimumOrder:
+          clearPromo ? null : (promoMinimumOrder ?? this.promoMinimumOrder),
       isValidatingPromo: isValidatingPromo ?? this.isValidatingPromo,
       promoError: clearPromoError || clearPromo ? null : (promoError ?? this.promoError),
     );
@@ -58,6 +69,16 @@ class CartState {
 
   double get tax {
     return 0.0;
+  }
+
+  /// Derived from the current items so it stays right when the cart changes.
+  double get promoDiscount {
+    if (appliedPromoCode == null) return 0.0;
+    final fixedAmount = promoFixedAmount;
+    final discount = fixedAmount != null && fixedAmount > 0
+        ? fixedAmount
+        : subtotal * promoPercentage / 100;
+    return discount > subtotal ? subtotal : discount;
   }
 
   double get total {
@@ -102,9 +123,7 @@ class CartNotifier extends StateNotifier<CartState> {
 
   void _listenToCartChanges() {
     _cartStreamSubscription = _repository.getCartItemsStream().listen(
-      (items) {
-        state = state.copyWith(items: items, isLoading: false);
-      },
+      (items) => _setItems(items),
       onError: (error) {
         state = state.copyWith(
           isLoading: false,
@@ -112,6 +131,24 @@ class CartNotifier extends StateNotifier<CartState> {
         );
       },
     );
+  }
+
+  /// Updates the items and drops the promo if the cart no longer qualifies.
+  void _setItems(List<CartItem> items) {
+    state = state.copyWith(items: items, isLoading: false);
+
+    if (state.appliedPromoCode == null) return;
+
+    final minimumOrder = state.promoMinimumOrder;
+    if (items.isEmpty) {
+      state = state.copyWith(clearPromo: true);
+    } else if (minimumOrder != null && state.subtotal < minimumOrder) {
+      state = state.copyWith(clearPromo: true);
+      state = state.copyWith(
+        promoError:
+            'Promo removed. Minimum order of \$${minimumOrder.toStringAsFixed(2)} required.',
+      );
+    }
   }
 
   @override
@@ -125,7 +162,7 @@ class CartNotifier extends StateNotifier<CartState> {
     try {
       state = state.copyWith(isLoading: true, errorMessage: null);
       final items = await _repository.getCartItems();
-      state = state.copyWith(items: items, isLoading: false);
+      _setItems(items);
     } catch (e) {
       state = state.copyWith(isLoading: false, errorMessage: e.toString());
     }
@@ -240,7 +277,7 @@ class CartNotifier extends StateNotifier<CartState> {
     try {
       state = state.copyWith(isLoading: true);
       await _repository.clearCart();
-      state = state.copyWith(isLoading: false);
+      state = state.copyWith(isLoading: false, clearPromo: true);
     } catch (e) {
       state = state.copyWith(isLoading: false, errorMessage: e.toString());
     }
@@ -360,22 +397,15 @@ class CartNotifier extends StateNotifier<CartState> {
         return;
       }
 
-      double discount = 0.0;
       final double pct = (data['discountPercentage'] as num?)?.toDouble() ?? 0.0;
       final double? fixedAmount = (data['discountAmount'] as num?)?.toDouble();
-
-      if (fixedAmount != null && fixedAmount > 0) {
-        discount = fixedAmount;
-      } else if (pct > 0) {
-        discount = state.subtotal * pct / 100;
-      }
-
-      if (discount > state.subtotal) discount = state.subtotal;
 
       state = state.copyWith(
         isValidatingPromo: false,
         appliedPromoCode: code.trim().toUpperCase(),
-        promoDiscount: discount,
+        promoPercentage: pct,
+        promoFixedAmount: fixedAmount,
+        promoMinimumOrder: minimumOrderAmount,
         clearPromoError: true,
       );
     } catch (e) {

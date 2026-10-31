@@ -6,6 +6,7 @@ import 'package:timeago/timeago.dart' as timeago;
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/routes/route_endpoint.dart';
+import '../widgets/promo_notification_card.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -116,6 +117,21 @@ class _NotificationScreenState extends State<NotificationScreen> {
               final message = data['message'] ?? '';
               final isRead = data['read'] == true;
               final timestamp = (data['createdAt'] as Timestamp?)?.toDate();
+
+              if (data['type'] == 'promo') {
+                return PromoNotificationCard(
+                  data: data,
+                  onRead: () async {
+                    if (isRead) return;
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(currentUser.uid)
+                        .collection('notifications')
+                        .doc(docId)
+                        .update({'read': true});
+                  },
+                );
+              }
 
               return Card(
                 elevation: isRead ? 0 : 2,

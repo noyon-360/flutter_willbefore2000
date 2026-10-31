@@ -83,6 +83,7 @@ class OrderNotifier extends StateNotifier<AsyncValue<List<Order>>> {
     required List<CartItem> items,
     required ShippingAddress shippingAddress,
     required String paymentIntentId,
+    required double total,
     required Map<String, dynamic> metadata,
   }) async {
     try {
@@ -90,6 +91,7 @@ class OrderNotifier extends StateNotifier<AsyncValue<List<Order>>> {
         items: items,
         shippingAddress: shippingAddress,
         paymentIntentId: paymentIntentId,
+        total: total,
         metadata: metadata,
       );
 

@@ -6,6 +6,7 @@ abstract class OrderRepository {
     required List<CartItem> items,
     required ShippingAddress shippingAddress,
     required String paymentIntentId,
+    required double total,
     required Map<String, dynamic> metadata,
   });
 

@@ -570,6 +570,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         ? widget.buyNowItem!.totalPrice
         : cartState.total;
 
+    // Promos only apply to the cart, not to a Buy Now purchase
+    final double subtotal = widget.buyNowItem != null
+        ? widget.buyNowItem!.totalPrice
+        : cartState.subtotal;
+    final double promoDiscount =
+        widget.buyNowItem != null ? 0.0 : cartState.promoDiscount;
+
     final double shippingCost = _selectedRate != null
         ? (double.tryParse(_selectedRate!['amount'].toString()) ?? 0.0)
         : 0.0;
@@ -599,10 +606,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                           _buildShippingRatesSection(formState),
                           const SizedBox(height: 24),
                           _buildOrderSummary(
-                            itemsTotal: itemsTotal,
+                            subtotal: subtotal,
                             shippingCost: shippingCost,
                             grandTotal: grandTotal,
-                            promoDiscount: cartState.promoDiscount,
+                            promoDiscount: promoDiscount,
                           ),
                           const SizedBox(height: 24),
                           _buildPaymentSection(),
@@ -673,7 +680,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   Widget _buildOrderSummary({
-    required double itemsTotal,
+    required double subtotal,
     required double shippingCost,
     required double grandTotal,
     required double promoDiscount,
@@ -698,7 +705,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          _summaryRow('Subtotal', '\$${itemsTotal.toStringAsFixed(2)}'),
+          _summaryRow('Subtotal', '\$${subtotal.toStringAsFixed(2)}'),
           if (promoDiscount > 0)
             _summaryRow(
               'Promo Discount',
@@ -1256,6 +1263,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     });
 
     try {
+      final cartState = ref.read(cartProvider);
+      final promoCode =
+          widget.buyNowItem == null ? cartState.appliedPromoCode : null;
+      final promoDiscount = cartState.promoDiscount;
+
       await _createShippoAddressAsync(formState);
 
       final paymentResult = await AuthorizeNetService.processPayment(
@@ -1298,6 +1310,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             items: cartItems,
             shippingAddress: shippingAddress,
             paymentIntentId: 'authnet_$transactionId',
+            total: total,
             metadata: {
               'shippo_address_id': _shippoAddressId,
               'shipping_cost': shippingCost.toStringAsFixed(2),
@@ -1308,6 +1321,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               'shipping_est_days': _selectedRate?['estimated_days'],
               'payment_gateway': 'authorize_net',
               'authorize_transaction_id': transactionId,
+              if (promoCode != null) 'promo_code': promoCode,
+              if (promoCode != null)
+                'promo_discount': promoDiscount.toStringAsFixed(2),
             },
           );
 

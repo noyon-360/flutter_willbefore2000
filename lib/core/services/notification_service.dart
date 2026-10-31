@@ -1,9 +1,13 @@
 // lib/services/notification_service.dart
+import 'dart:convert';
 import 'dart:io'; // ← Add this import
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:flutx_core/flutx_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -18,6 +22,10 @@ class NotificationService {
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
+
+  /// True when a tapped push should open the notification page. The app reads
+  /// this once the router has left the splash screen.
+  final ValueNotifier<bool> pendingOpen = ValueNotifier(false);
 
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'high_importance_channel',
@@ -38,6 +46,12 @@ class NotificationService {
 
     // Firebase already initialized in main.dart → safe to use here
     FirebaseMessaging.onBackgroundMessage(_backgroundHandler);
+
+    FirebaseMessaging.onMessageOpenedApp.listen(
+      (message) => _handleTap(message.data),
+    );
+    final initialMessage = await _messaging.getInitialMessage();
+    if (initialMessage != null) _handleTap(initialMessage.data);
 
     await _requestPermissions();
 
@@ -97,35 +111,82 @@ class NotificationService {
       settings: const InitializationSettings(android: android, iOS: ios),
       onDidReceiveNotificationResponse: (response) {
         DPrint.log("Notification tapped: ${response.payload}");
+        _handleLocalTap(response.payload);
       },
     );
 
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      final notification = message.notification;
-      if (notification == null) return;
+    // Tapped while the app was closed
+    final launchDetails = await _localNotifications
+        .getNotificationAppLaunchDetails();
+    if (launchDetails?.didNotificationLaunchApp ?? false) {
+      _handleLocalTap(launchDetails?.notificationResponse?.payload);
+    }
 
-      _localNotifications.show(
-        id: notification.hashCode,
-        title: notification.title,
-        body: notification.body,
-        notificationDetails: NotificationDetails(
-          android: AndroidNotificationDetails(
-            _channel.id,
-            _channel.name,
-            channelDescription: _channel.description,
-            importance: Importance.high,
-            priority: Priority.high,
-            icon: '@mipmap/launcher_icon',
-          ),
-          iOS: const DarwinNotificationDetails(
-            presentAlert: true,
-            presentBadge: true,
-            presentSound: true,
-          ),
+    FirebaseMessaging.onMessage.listen(_showForegroundNotification);
+  }
+
+  Future<void> _showForegroundNotification(RemoteMessage message) async {
+    final notification = message.notification;
+    if (notification == null) return;
+
+    // iOS already shows it, see setForegroundNotificationPresentationOptions
+    if (Platform.isIOS) return;
+
+    final imagePath = await _downloadImage(notification.android?.imageUrl);
+
+    await _localNotifications.show(
+      id: notification.hashCode,
+      title: notification.title,
+      body: notification.body,
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channel.id,
+          _channel.name,
+          channelDescription: _channel.description,
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/launcher_icon',
+          styleInformation: imagePath == null
+              ? null
+              : BigPictureStyleInformation(
+                  FilePathAndroidBitmap(imagePath),
+                  contentTitle: notification.title,
+                  summaryText: notification.body,
+                ),
         ),
-        payload: message.data.toString(),
-      );
-    });
+      ),
+      payload: jsonEncode(message.data),
+    );
+  }
+
+  /// A failed download only costs the image, so the text still shows.
+  Future<String?> _downloadImage(String? imageUrl) async {
+    if (imageUrl == null || imageUrl.isEmpty) return null;
+    try {
+      final response = await http.get(Uri.parse(imageUrl));
+      if (response.statusCode != 200) return null;
+
+      final directory = await getTemporaryDirectory();
+      final file = File('${directory.path}/push_${imageUrl.hashCode}');
+      await file.writeAsBytes(response.bodyBytes);
+      return file.path;
+    } catch (e) {
+      DPrint.error("Failed to download notification image: $e");
+      return null;
+    }
+  }
+
+  void _handleLocalTap(String? payload) {
+    if (payload == null || payload.isEmpty) return;
+    try {
+      _handleTap(jsonDecode(payload) as Map<String, dynamic>);
+    } catch (e) {
+      DPrint.error("Failed to read notification payload: $e");
+    }
+  }
+
+  void _handleTap(Map<String, dynamic> data) {
+    if (data['type'] == 'promo') pendingOpen.value = true;
   }
 
   // ──────────────────────────────────────────────────────────────

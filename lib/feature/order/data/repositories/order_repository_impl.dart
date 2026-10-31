@@ -17,6 +17,7 @@ class OrderRepositoryImpl implements OrderRepository {
     required List<CartItem> items,
     required ShippingAddress shippingAddress,
     required String paymentIntentId,
+    required double total,
     required Map<String, dynamic> metadata,
   }) async {
     final user = _auth.currentUser;
@@ -26,7 +27,6 @@ class OrderRepositoryImpl implements OrderRepository {
 
     final subtotal = items.fold(0.0, (sum, item) => sum + item.totalPrice);
     final tax = subtotal * 0.0; // No tax for now
-    final total = subtotal + tax;
 
     final order = Order(
       id: DateTime.now().millisecondsSinceEpoch.toString(),

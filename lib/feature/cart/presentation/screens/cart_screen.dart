@@ -271,7 +271,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                             onPressed: () {
                               context.pushNamed(RoutePaths.checkout);
                             },
-                            text: "Continue Shopping",
+                            text: "Proceed to Checkout",
                           ),
                         ),
                       ],

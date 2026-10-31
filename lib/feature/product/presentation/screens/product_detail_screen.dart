@@ -149,8 +149,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       );
       actionMessage = '${product.title} updated in cart!';
     } else {
-      await cartNotifier.addToCart(product, quantity, selectedSize, selectedColor);
       final hasOtherVariants = cartNotifier.hasProductInCart(product.id);
+      await cartNotifier.addToCart(product, quantity, selectedSize, selectedColor);
       actionMessage = hasOtherVariants
           ? '${product.title} variant added to cart!'
           : '${product.title} added to cart!';
@@ -161,6 +161,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         SnackBar(
           content: Text(actionMessage, style: TextStyle()),
           backgroundColor: AppColors.primaryLaurel,
+          duration: const Duration(seconds: 3),
+          persist: false,
           action: SnackBarAction(
             label: 'View Cart',
             textColor: Colors.white,
